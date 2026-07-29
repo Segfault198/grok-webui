@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const os = require('node:os');
 const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 
@@ -26,7 +27,7 @@ loadEnv(path.join(PROJECT_ROOT, '.env'));
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 4546);
-const WORKSPACE_ROOT = fs.realpathSync(process.env.WORKSPACE_ROOT || '/home/eric/workspace');
+const WORKSPACE_ROOT = fs.realpathSync(process.env.WORKSPACE_ROOT || os.homedir());
 const GROK_HOME = process.env.GROK_HOME || path.join(process.env.HOME || '', '.grok');
 const SESSIONS_ROOT = path.join(GROK_HOME, 'sessions');
 const ENV_FILE = path.join(PROJECT_ROOT, '.env');
@@ -794,7 +795,7 @@ class GrokBridge {
 
       this.rawRequest('initialize', {
         protocolVersion: 1,
-        clientInfo: { name: 'eric_grok_webui', title: 'Eric Grok WebUI', version: '0.1.0' },
+        clientInfo: { name: 'grok_webui', title: 'Grok WebUI', version: '0.1.0' },
         clientCapabilities: {
           fs: { readTextFile: true, writeTextFile: true },
           // Agent runs tools itself; client terminal protocol is not implemented.

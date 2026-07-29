@@ -6,6 +6,9 @@ Free, self-hosted browser UI for the Grok agent on **your** machine. Speaks the 
 
 **Downloads & setup guide:** [agentmediatools.com/webui](https://agentmediatools.com/webui)
 
+Independent community project from Agent Media Tools. Not affiliated with or
+endorsed by xAI.
+
 ## Features
 
 - Multi-session chat history (reads `~/.grok/sessions`, continues via `session/load`)
