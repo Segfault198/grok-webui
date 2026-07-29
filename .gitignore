@@ -1,0 +1,8 @@
+.env
+.webui-password
+node_modules/
+data/uploads/
+data/amt.json
+*.log
+.DS_Store
+coverage/

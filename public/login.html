@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Grok WebUI · Sign in</title>
+  <meta name="description" content="Sign in to your free self-hosted Grok WebUI.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app.css?v=14">
+  <script src="/viewport.js?v=4"></script>
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <div class="brand-mark" aria-hidden="true">G</div>
+    <p class="eyebrow" id="auth-eyebrow">SELF-HOSTED · FREE FOREVER</p>
+    <h1 id="auth-title">Grok, from anywhere.</h1>
+    <p class="muted" id="auth-blurb">A private bridge to the Grok agent on this machine — chat history, tools, files, and slash commands. Free to run; optional tip if it helps.</p>
+
+    <!-- First-run: choose credentials -->
+    <form id="setup-form" method="post" action="/api/setup" autocomplete="on" hidden>
+      <label for="setup-username">Username</label>
+      <input id="setup-username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64" required>
+      <label for="setup-password">Password</label>
+      <input id="setup-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="200" required>
+      <label for="setup-confirm">Confirm password</label>
+      <input id="setup-confirm" name="confirm" type="password" autocomplete="new-password" minlength="12" maxlength="200" required>
+      <button class="primary wide" type="submit">Create login &amp; open workspace</button>
+      <p id="setup-error" class="error" role="alert"></p>
+      <p class="secure-note" style="margin-top:10px">Password must be at least 12 characters. Stored as a scrypt hash on this machine.</p>
+    </form>
+
+    <!-- Normal sign-in -->
+    <form id="login-form" method="post" action="/api/login" autocomplete="on" hidden>
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" maxlength="64" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button class="primary wide" type="submit">Open workspace</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+
+    <p class="secure-note"><span>●</span> Bind to Tailscale or localhost — not the public internet</p>
+    <p class="login-tip-link">
+      <a href="https://agentmediatools.com/tip?from=grok-webui" target="_blank" rel="noopener">Optional tip if this helps →</a>
+    </p>
+  </main>
+  <script src="/app.js?v=15"></script>
+</body>
+</html>
