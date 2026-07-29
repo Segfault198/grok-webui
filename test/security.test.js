@@ -256,6 +256,9 @@ test('chat media resolves session-relative paths and serves GROK_HOME artifacts'
 
 test('slash commands and file paste/drag are supported in the composer', () => {
   assert.match(app, /function showCommands/);
+  assert.match(app, /async function ensureCommands/);
+  assert.match(app, /await ensureCommands\(\)/);
+  assert.match(server, /commands: bridge\.availableCommands\.get\(result\.sessionId\)/);
   assert.match(app, /function queueFiles/);
   assert.match(app, /clipboardData/);
   assert.match(app, /dataTransfer/);

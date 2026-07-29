@@ -1358,6 +1358,7 @@ async function api(req, res, pathname) {
     return json(res, 201, {
       sessionId: result.sessionId,
       models: result.models || null,
+      commands: bridge.availableCommands.get(result.sessionId) || [],
       meta: result._meta || null,
       cwd,
     });

@@ -166,6 +166,7 @@ if ($('#composer-form')) {
     historyLoadingOlder: false,
     messageQueue: [],
     stagedMessage: null,
+    commandLoadPromise: null,
   };
 
   /** Fewer messages/tools on narrow viewports — mobile Safari is the main crash surface. */
@@ -1695,8 +1696,30 @@ if ($('#composer-form')) {
     if (!state.sessionId) throw new Error('Grok did not return a session ID');
     localStorage.setItem('grok-webui-active-session', state.sessionId);
     if (result.models) applyModels(result.models);
+    if (Array.isArray(result.commands) && result.commands.length) state.commands = result.commands;
     $('#session-path').textContent = state.cwd;
     return state.sessionId;
+  }
+
+  async function ensureCommands() {
+    if (state.commands.length) return state.commands;
+    if (state.commandLoadPromise) return state.commandLoadPromise;
+    state.commandLoadPromise = (async () => {
+      const sessionId = await ensureSession();
+      // Some Grok versions publish commands just after session/new resolves.
+      for (const delay of [0, 80, 200, 500]) {
+        if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+        const result = await request(`/api/sessions/${encodeURIComponent(sessionId)}/commands`);
+        if (Array.isArray(result.commands) && result.commands.length) {
+          state.commands = result.commands;
+          break;
+        }
+      }
+      return state.commands;
+    })().finally(() => {
+      state.commandLoadPromise = null;
+    });
+    return state.commandLoadPromise;
   }
 
   function renderAttachments() {
@@ -2268,14 +2291,24 @@ if ($('#composer-form')) {
     }
   });
 
-  $('#message').addEventListener('input', (event) => {
+  $('#message').addEventListener('input', async (event) => {
     event.target.style.height = 'auto';
     event.target.style.height = `${Math.min(event.target.scrollHeight, 190)}px`;
     const value = event.target.value;
     const cursor = event.target.selectionStart || value.length;
     const before = value.slice(0, cursor);
     const slash = before.match(/(?:^|\s)(\/[^\s]*)$/);
-    if (slash) showCommands(slash[1]);
+    if (slash) {
+      try {
+        await ensureCommands();
+        const currentCursor = event.target.selectionStart || event.target.value.length;
+        const currentSlash = event.target.value.slice(0, currentCursor).match(/(?:^|\s)(\/[^\s]*)$/);
+        if (currentSlash) showCommands(currentSlash[1]);
+      } catch (error) {
+        toast(error.message, 'error');
+        hideCommands();
+      }
+    }
     else hideCommands();
   });
 
