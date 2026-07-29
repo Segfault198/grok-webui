@@ -1496,7 +1496,11 @@ if ($('#composer-form')) {
         }
       }
       if (result.models) applyModels(result.models);
-      const active = Boolean(result.active) || state.activeSessionIds.has(state.sessionId);
+      // Fresh session history is authoritative. Mobile Safari can keep an
+      // apparently-open SSE connection after missing its completion event.
+      const active = Boolean(result.active);
+      if (active) state.activeSessionIds.add(state.sessionId);
+      else state.activeSessionIds.delete(state.sessionId);
       setRunning(active);
       if (!active && state.awaitingTurn && (turnAssistant || diskAssistant)) {
         // Turn finished on disk — stop waiting even if a completion event was missed.
@@ -1621,7 +1625,9 @@ if ($('#composer-form')) {
       renderHistory(result.messages || [], result.tools || []);
       state.commands = result.commands || state.commands;
       if (result.models) applyModels(result.models);
-      setRunning(Boolean(result.active) || state.activeSessionIds.has(state.sessionId));
+      if (result.active) state.activeSessionIds.add(state.sessionId);
+      else state.activeSessionIds.delete(state.sessionId);
+      setRunning(Boolean(result.active));
       renderSessions();
       restoreDraft();
       $('#sidebar').classList.remove('open');
@@ -2186,6 +2192,10 @@ if ($('#composer-form')) {
       });
       window.addEventListener('focus', () => {
         if (state.sessionId) resyncSession();
+      });
+      window.addEventListener('pageshow', () => {
+        if (state.sessionId) resyncSession({ force: true, full: true });
+        connectEvents();
       });
       window.addEventListener('online', () => {
         setConnected(true);

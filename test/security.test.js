@@ -177,6 +177,9 @@ test('live chat resyncs when SSE stalls and handles turn_completed', () => {
   assert.match(app, /turn_completed/);
   assert.match(app, /_x\.ai\/session\/update/);
   assert.match(app, /visibilitychange/);
+  assert.match(app, /Fresh session history is authoritative/);
+  assert.doesNotMatch(app, /Boolean\(result\.active\) \|\| state\.activeSessionIds\.has/);
+  assert.match(app, /window\.addEventListener\('pageshow'/);
   assert.match(server, /function slimGrokEvent/);
   assert.match(server, /X-Accel-Buffering/);
 });
