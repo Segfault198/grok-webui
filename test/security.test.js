@@ -210,6 +210,18 @@ test('mobile does not auto-open the full-screen activity rail on tool use', () =
   assert.match(app, /isMobileLayout\(\)[\s\S]{0,120}setActivityOpen\(false,\s*\{\s*persist:\s*false\s*\}\)/);
 });
 
+test('mobile keyboard panning keeps the composer inside the visible viewport', () => {
+  const css = fs.readFileSync(path.join(root, 'public/app.css'), 'utf8');
+  const viewport = fs.readFileSync(path.join(root, 'public/viewport.js'), 'utf8');
+  assert.match(css, /top: var\(--app-top, 0px\)/);
+  assert.match(css, /width: var\(--app-width, 100vw\)/);
+  assert.match(css, /overflow-anchor: none/);
+  assert.match(viewport, /visualViewport/);
+  assert.match(viewport, /offsetTop/);
+  assert.match(app, /function keepLatestVisibleWhileTyping/);
+  assert.match(app, /visualViewport\?\.addEventListener\('resize', restoreLatest\)/);
+});
+
 test('attachments and media stay on authenticated endpoints', () => {
   assert.match(server, /pathname === '\/api\/upload'/);
   assert.match(server, /pathname === '\/api\/image'/);
