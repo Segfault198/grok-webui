@@ -200,6 +200,13 @@ test('routine reasoning and file activity never spam the chat transcript', () =>
   assert.match(app, /addMessage\('assistant'/);
 });
 
+test('live assistant chunks keep provider message boundaries when available', () => {
+  assert.match(app, /streamingMessageId/);
+  assert.match(app, /messageId !== state\.streamingMessageId/);
+  assert.match(app, /finalizeStreamingMessage\(\)/);
+  assert.match(server, /openAgent\.messageId/);
+});
+
 test('mobile does not auto-open the full-screen activity rail on tool use', () => {
   assert.match(app, /function isMobileLayout/);
   assert.match(app, /function maybeAutoOpenActivity/);

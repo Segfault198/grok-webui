@@ -638,7 +638,11 @@ function coalesceHistory(sessionDir, options = {}) {
       flush('user');
       flush('thought');
       const text = update.content?.text || '';
-      if (!openAgent) openAgent = { role: 'assistant', text: '', at: row.timestamp || null };
+      const messageId = update.messageId || update.message_id || update.content?.id
+        || update.content?.messageId || update.content?.message_id || null;
+      if (openAgent && messageId && openAgent.messageId && messageId !== openAgent.messageId) flush('agent');
+      if (!openAgent) openAgent = { role: 'assistant', text: '', at: row.timestamp || null, messageId };
+      else if (!openAgent.messageId && messageId) openAgent.messageId = messageId;
       openAgent.text += text;
     } else if (type === 'agent_thought_chunk') {
       flush('user');

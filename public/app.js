@@ -134,6 +134,7 @@ if ($('#composer-form')) {
     cwd: null,
     running: false,
     streamingNode: null,
+    streamingMessageId: null,
     sessions: [],
     activeSessionIds: new Set(),
     followOutput: true,
@@ -1324,6 +1325,7 @@ if ($('#composer-form')) {
     const conversation = $('#conversation');
     conversation.replaceChildren();
     state.streamingNode = null;
+    state.streamingMessageId = null;
     resetActivity({ preservePlan: true });
     for (const message of messages) {
       if (message.role === 'user') {
@@ -1368,6 +1370,7 @@ if ($('#composer-form')) {
     if (!state.streamingNode) return;
     renderRichText(state.streamingNode, state.streamingNode.textContent);
     state.streamingNode = null;
+    state.streamingMessageId = null;
   }
 
   /**
@@ -1658,6 +1661,7 @@ if ($('#composer-form')) {
     state.sessionId = null;
     localStorage.removeItem('grok-webui-active-session');
     state.streamingNode = null;
+    state.streamingMessageId = null;
     state.optimisticUsers = [];
     state.historyFingerprint = '';
     state.historyTotalMessages = 0;
@@ -1888,6 +1892,7 @@ if ($('#composer-form')) {
       setRunning(true);
       state.awaitingTurn = true;
       state.streamingNode = null;
+      state.streamingMessageId = null;
       resetActivity({ preservePlan: false });
       updateActivity('turn', { title: 'Turn started', detail: 'Grok is analyzing your request.', kind: 'reasoning', status: 'running' });
       clearCatchupTimers();
@@ -1975,7 +1980,13 @@ if ($('#composer-form')) {
         setRunning(true);
         const piece = update.content?.text || '';
         if (!piece) return;
+        const messageId = update.messageId || update.message_id || update.content?.id
+          || update.content?.messageId || update.content?.message_id || null;
+        if (state.streamingNode && messageId && state.streamingMessageId && messageId !== state.streamingMessageId) {
+          finalizeStreamingMessage();
+        }
         if (!state.streamingNode) addMessage('assistant', '', true);
+        if (messageId) state.streamingMessageId = messageId;
         appendStreamPiece(state.streamingNode, piece);
         scheduleScrollToLatest();
       } else if (updateType === 'agent_thought_chunk') {
