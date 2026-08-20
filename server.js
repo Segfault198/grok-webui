@@ -1605,7 +1605,9 @@ async function api(req, res, pathname) {
       : /deny|decline|reject|no/i;
     const selected = options.find((option) => pattern.test(option.optionId || option.id || option.name || ''));
     if (!selected) return json(res, 400, { error: 'Requested decision is unavailable' });
-    bridge.respond(requestId, { outcome: { outcome: 'selected', optionId: selected.optionId || selected.id } });
+    // Preserve original JSON-RPC id type (number vs string) from the agent request.
+    console.log('[permissions] responding id=', pending.id, 'typeof=', typeof pending.id);
+    bridge.respond(pending.id, { outcome: { outcome: 'selected', optionId: selected.optionId || selected.id } });
     return json(res, 200, { ok: true });
   }
 
@@ -1619,8 +1621,9 @@ async function api(req, res, pathname) {
     }
     const body = await readJson(req);
     const result = buildAskUserResult(body, pending.params || {});
-    console.log('[ask_user_question] responding', requestId, JSON.stringify(result).slice(0, 800));
-    bridge.respond(requestId, result);
+    // Preserve original JSON-RPC id type (number vs string) from the agent request.
+    console.log('[ask_user_question] responding id=', pending.id, 'typeof=', typeof pending.id, JSON.stringify(result).slice(0, 800));
+    bridge.respond(pending.id, result);
     return json(res, 200, { ok: true });
   }
 
@@ -1634,8 +1637,9 @@ async function api(req, res, pathname) {
     }
     const body = await readJson(req);
     const result = buildPlanApprovalResult(body);
-    console.log('[exit_plan_mode] responding', requestId, result);
-    bridge.respond(requestId, result);
+    // Preserve original JSON-RPC id type (number vs string) from the agent request.
+    console.log('[exit_plan_mode] responding id=', pending.id, 'typeof=', typeof pending.id, result);
+    bridge.respond(pending.id, result);
     return json(res, 200, { ok: true });
   }
 

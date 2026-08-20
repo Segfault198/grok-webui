@@ -264,6 +264,9 @@ test('ask_user_question and exit_plan_mode are handled interactively', () => {
   assert.match(server, /partial_answers/);
   assert.match(server, /type: 'ask_user_question'/);
   assert.match(server, /type: 'exit_plan_mode'/);
+  // JSON-RPC id type must match the agent request (use pending.id, not URL string).
+  assert.match(server, /bridge\.respond\(pending\.id,/);
+  assert.match(server, /typeof=\s*',\s*typeof pending\.id/);
   assert.match(html, /id="ask-user-modal"/);
   assert.match(html, /id="plan-approval-modal"/);
   assert.match(html, /id="ask-user-submit"/);
