@@ -2684,17 +2684,15 @@ if ($('#composer-form')) {
   $('#ask-user-skip')?.addEventListener('click', () => submitAskUser({ skip: true }));
   $('#ask-user-dismiss')?.addEventListener('click', () => submitAskUser({ skip: true }));
   $('#ask-user-chat')?.addEventListener('click', () => submitAskUser({ chatAboutThis: true }));
-  $('#ask-user-modal')?.addEventListener('click', (event) => {
-    if (event.target === $('#ask-user-modal')) submitAskUser({ skip: true });
-  });
+  // Blocking ACP prompts: no backdrop dismiss (would cancel the agent request).
+  $('#ask-user-modal .ask-dialog')?.addEventListener('click', (event) => event.stopPropagation());
+  $('#plan-approval-modal .plan-dialog')?.addEventListener('click', (event) => event.stopPropagation());
 
   $('#plan-approve')?.addEventListener('click', () => submitPlanApproval('approve'));
   $('#plan-request-changes')?.addEventListener('click', () => submitPlanApproval('request_changes'));
   $('#plan-quit')?.addEventListener('click', () => submitPlanApproval('quit'));
   $('#plan-approval-dismiss')?.addEventListener('click', () => submitPlanApproval('quit'));
-  $('#plan-approval-modal')?.addEventListener('click', (event) => {
-    if (event.target === $('#plan-approval-modal')) submitPlanApproval('quit');
-  });
+  // Blocking ACP prompt: backdrop click must not dismiss or quit plan mode.
 
   $('#close-prefs')?.addEventListener('click', closePrefsModal);
   prefsModal?.addEventListener('click', (event) => {
@@ -2727,12 +2725,7 @@ if ($('#composer-form')) {
     if (event.key !== 'Escape') return;
     if (tipModal && !tipModal.classList.contains('hidden')) closeTipModal();
     if (prefsModal && !prefsModal.classList.contains('hidden')) closePrefsModal();
-    if ($('#ask-user-modal') && !$('#ask-user-modal').classList.contains('hidden')) {
-      submitAskUser({ skip: true });
-    }
-    if ($('#plan-approval-modal') && !$('#plan-approval-modal').classList.contains('hidden')) {
-      submitPlanApproval('quit');
-    }
+    // Ask/plan modals are blocking agent prompts — Esc must not skip/quit them.
   });
   $$('[data-tip-amount]').forEach((button) => {
     button.addEventListener('click', () => openTipCheckout(button.dataset.tipAmount));
