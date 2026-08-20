@@ -168,6 +168,9 @@ if ($('#composer-form')) {
     messageQueue: [],
     stagedMessage: null,
     commandLoadPromise: null,
+    pendingPermission: null,
+    pendingAskUser: null,
+    pendingPlanApproval: null,
   };
 
   /** Fewer messages/tools on narrow viewports — mobile Safari is the main crash surface. */
@@ -2171,8 +2174,126 @@ if ($('#composer-form')) {
         const params = payload.request?.params || {};
         $('#approval-summary').textContent = params.toolCall?.title || params.title || params.toolName || 'Grok wants to run a protected action.';
         $('#approval-drawer').classList.remove('hidden');
+      } else if (payload.type === 'ask_user_question') {
+        openAskUserModal(payload.request);
+      } else if (payload.type === 'exit_plan_mode') {
+        openPlanApprovalModal(payload.request, payload.planText || '', payload.planPath || null);
       }
     };
+  }
+
+  function hideAskUserModal() {
+    $('#ask-user-modal')?.classList.add('hidden');
+    state.pendingAskUser = null;
+  }
+
+  function hidePlanApprovalModal() {
+    $('#plan-approval-modal')?.classList.add('hidden');
+    state.pendingPlanApproval = null;
+    const feedback = $('#plan-approval-feedback');
+    if (feedback) feedback.value = '';
+  }
+
+  function openAskUserModal(request) {
+    state.pendingAskUser = request;
+    const questions = request?.params?.questions || [];
+    const root = $('#ask-user-questions');
+    if (!root) return;
+    root.replaceChildren();
+    questions.forEach((q, qi) => {
+      const card = document.createElement('article');
+      card.className = 'ask-question';
+      card.dataset.qi = String(qi);
+      const title = document.createElement('h3');
+      title.textContent = q.question || q.prompt || `Question ${qi + 1}`;
+      card.append(title);
+      const optionsWrap = document.createElement('div');
+      optionsWrap.className = 'ask-options';
+      const multi = Boolean(q.multiSelect || q.multi_select);
+      (q.options || []).forEach((opt, oi) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ask-option';
+        btn.dataset.label = opt.label || opt.name || `Option ${oi + 1}`;
+        btn.dataset.multi = multi ? '1' : '0';
+        const label = document.createElement('span');
+        label.textContent = opt.label || opt.name || `Option ${oi + 1}`;
+        btn.append(label);
+        if (opt.description) {
+          const desc = document.createElement('small');
+          desc.textContent = opt.description;
+          btn.append(desc);
+        }
+        btn.addEventListener('click', () => {
+          if (multi) btn.classList.toggle('selected');
+          else {
+            optionsWrap.querySelectorAll('.ask-option').forEach((el) => el.classList.remove('selected'));
+            btn.classList.add('selected');
+          }
+        });
+        optionsWrap.append(btn);
+      });
+      card.append(optionsWrap);
+      const other = document.createElement('input');
+      other.type = 'text';
+      other.className = 'ask-other';
+      other.placeholder = 'Other (optional)';
+      other.autocomplete = 'off';
+      card.append(other);
+      root.append(card);
+    });
+    $('#ask-user-modal')?.classList.remove('hidden');
+  }
+
+  function collectAskUserAnswers() {
+    const cards = [...($$('#ask-user-questions .ask-question'))];
+    return cards.map((card) => {
+      const selected = [...card.querySelectorAll('.ask-option.selected')].map((btn) => btn.dataset.label || btn.textContent.trim());
+      const otherRaw = card.querySelector('.ask-other')?.value?.trim() || '';
+      return { selected, other: otherRaw || null };
+    });
+  }
+
+  async function submitAskUser(body) {
+    if (!state.pendingAskUser) return;
+    const id = state.pendingAskUser.id;
+    try {
+      await request(`/api/ask-user/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      hideAskUserModal();
+    } catch (error) {
+      toast(error.message, 'error');
+    }
+  }
+
+  function openPlanApprovalModal(request, planText, planPath) {
+    state.pendingPlanApproval = request;
+    const preview = $('#plan-approval-text');
+    if (preview) {
+      preview.textContent = planText?.trim()
+        || (planPath ? `(No plan content loaded from ${planPath})` : 'No plan written yet.');
+    }
+    const feedback = $('#plan-approval-feedback');
+    if (feedback) feedback.value = '';
+    $('#plan-approval-modal')?.classList.remove('hidden');
+  }
+
+  async function submitPlanApproval(decision) {
+    if (!state.pendingPlanApproval) return;
+    const id = state.pendingPlanApproval.id;
+    const feedback = $('#plan-approval-feedback')?.value || '';
+    try {
+      await request(`/api/plan-approval/${encodeURIComponent(id)}`, {
+        method: 'POST',
+        body: JSON.stringify({ decision, feedback }),
+      });
+      hidePlanApprovalModal();
+      toast(decision === 'approve' ? 'Plan approved' : decision === 'quit' ? 'Plan quit' : 'Requested plan changes');
+    } catch (error) {
+      toast(error.message, 'error');
+    }
   }
 
   async function initialize() {
@@ -2556,6 +2677,25 @@ if ($('#composer-form')) {
       $('#approval-drawer').classList.add('hidden');
     } catch (error) { toast(error.message, 'error'); }
   }));
+
+  $('#ask-user-submit')?.addEventListener('click', () => {
+    submitAskUser({ answers: collectAskUserAnswers(), partial_answers: [] });
+  });
+  $('#ask-user-skip')?.addEventListener('click', () => submitAskUser({ skip: true }));
+  $('#ask-user-dismiss')?.addEventListener('click', () => submitAskUser({ skip: true }));
+  $('#ask-user-chat')?.addEventListener('click', () => submitAskUser({ chatAboutThis: true }));
+  $('#ask-user-modal')?.addEventListener('click', (event) => {
+    if (event.target === $('#ask-user-modal')) submitAskUser({ skip: true });
+  });
+
+  $('#plan-approve')?.addEventListener('click', () => submitPlanApproval('approve'));
+  $('#plan-request-changes')?.addEventListener('click', () => submitPlanApproval('request_changes'));
+  $('#plan-quit')?.addEventListener('click', () => submitPlanApproval('quit'));
+  $('#plan-approval-dismiss')?.addEventListener('click', () => submitPlanApproval('quit'));
+  $('#plan-approval-modal')?.addEventListener('click', (event) => {
+    if (event.target === $('#plan-approval-modal')) submitPlanApproval('quit');
+  });
+
   $('#close-prefs')?.addEventListener('click', closePrefsModal);
   prefsModal?.addEventListener('click', (event) => {
     if (event.target === prefsModal) closePrefsModal();
@@ -2587,6 +2727,12 @@ if ($('#composer-form')) {
     if (event.key !== 'Escape') return;
     if (tipModal && !tipModal.classList.contains('hidden')) closeTipModal();
     if (prefsModal && !prefsModal.classList.contains('hidden')) closePrefsModal();
+    if ($('#ask-user-modal') && !$('#ask-user-modal').classList.contains('hidden')) {
+      submitAskUser({ skip: true });
+    }
+    if ($('#plan-approval-modal') && !$('#plan-approval-modal').classList.contains('hidden')) {
+      submitPlanApproval('quit');
+    }
   });
   $$('[data-tip-amount]').forEach((button) => {
     button.addEventListener('click', () => openTipCheckout(button.dataset.tipAmount));

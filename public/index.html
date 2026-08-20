@@ -6,7 +6,7 @@
   <title>Grok WebUI</title>
   <meta name="description" content="Free self-hosted browser UI for the Grok agent on your machine.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/app.css?v=17">
+  <link rel="stylesheet" href="/app.css?v=18">
   <script src="/viewport.js?v=5"></script>
 </head>
 <body data-theme="dark" data-accent="blue">
@@ -156,6 +156,36 @@
   </div>
   <div class="toast-region" id="toasts" aria-live="polite"></div>
 
+  <div class="ask-modal hidden" id="ask-user-modal" role="dialog" aria-modal="true" aria-labelledby="ask-user-title">
+    <div class="ask-dialog">
+      <button type="button" class="icon-button ask-close" id="ask-user-dismiss" aria-label="Skip questions">×</button>
+      <h2 id="ask-user-title">Grok has a question</h2>
+      <p class="ask-lede">Answer so the agent can continue. Skip dismisses without answering.</p>
+      <div id="ask-user-questions" class="ask-questions"></div>
+      <div class="ask-actions">
+        <button type="button" class="secondary" id="ask-user-skip">Skip</button>
+        <button type="button" class="secondary" id="ask-user-chat">Chat about this</button>
+        <button type="button" class="primary" id="ask-user-submit">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="plan-modal hidden" id="plan-approval-modal" role="dialog" aria-modal="true" aria-labelledby="plan-approval-title">
+    <div class="plan-dialog">
+      <button type="button" class="icon-button plan-close" id="plan-approval-dismiss" aria-label="Quit plan">×</button>
+      <h2 id="plan-approval-title">Review plan</h2>
+      <p class="plan-lede">Approve to start building, request changes to revise, or quit plan mode.</p>
+      <pre class="plan-preview" id="plan-approval-text"></pre>
+      <label class="plan-feedback-label" for="plan-approval-feedback">Feedback (optional)</label>
+      <textarea id="plan-approval-feedback" rows="3" placeholder="What should change?"></textarea>
+      <div class="plan-actions">
+        <button type="button" class="danger" id="plan-quit">Quit plan</button>
+        <button type="button" class="secondary" id="plan-request-changes">Request changes</button>
+        <button type="button" class="primary" id="plan-approve">Approve</button>
+      </div>
+    </div>
+  </div>
+
   <div class="tip-modal hidden" id="tip-modal" role="dialog" aria-modal="true" aria-labelledby="tip-title">
     <div class="tip-dialog">
       <button type="button" class="icon-button tip-close" id="close-tip" aria-label="Close">×</button>
@@ -287,6 +317,6 @@
     </div>
   </div>
 
-  <script src="/app.js?v=20"></script>
+  <script src="/app.js?v=21"></script>
 </body>
 </html>

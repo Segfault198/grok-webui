@@ -452,6 +452,70 @@ function findSessionDir(sessionId) {
   return null;
 }
 
+function readPlanForExit(params = {}) {
+  const inline = params.planContent ?? params.plan_content ?? params.planText ?? params.plan_text;
+  if (typeof inline === 'string' && inline.trim()) {
+    return { planText: inline, planPath: params.planPath || params.plan_path || null };
+  }
+
+  let planPath = params.planPath || params.plan_path || params.path || null;
+  if (!planPath && params.sessionId) {
+    const dir = findSessionDir(params.sessionId);
+    if (dir) planPath = path.join(dir, 'plan.md');
+  }
+
+  if (typeof planPath === 'string' && planPath) {
+    try {
+      const resolved = fs.realpathSync(planPath);
+      const grokRoot = fs.realpathSync(GROK_HOME);
+      if (resolved === grokRoot || resolved.startsWith(`${grokRoot}${path.sep}`)) {
+        if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+          return { planText: fs.readFileSync(resolved, 'utf8'), planPath: resolved };
+        }
+      }
+    } catch {
+      // Fall through to empty plan.
+    }
+  }
+
+  return { planText: '', planPath: planPath || null };
+}
+
+/** Build ExtResponse for ask_user_question from the browser POST body. */
+function buildAskUserResult(body = {}, pendingParams = {}) {
+  // Unit variants: serde externally-tagged (SkipInterview / ChatAboutThis).
+  if (body.skip || body.skipInterview || body.skip_interview) {
+    return { SkipInterview: null };
+  }
+  if (body.chatAboutThis || body.chat_about_this) {
+    return { ChatAboutThis: null };
+  }
+
+  const questions = Array.isArray(pendingParams.questions) ? pendingParams.questions : [];
+  let answers = body.answers;
+  if (!Array.isArray(answers)) {
+    answers = questions.map((q) => {
+      const first = q?.options?.[0]?.label || q?.options?.[0]?.name || null;
+      return { selected: first ? [first] : [], other: null };
+    });
+  }
+  const partial = Array.isArray(body.partial_answers)
+    ? body.partial_answers
+    : (Array.isArray(body.partialAnswers) ? body.partialAnswers : []);
+  // Accepted: prefer flat { answers, partial_answers } (untagged / field match).
+  return { answers, partial_answers: partial };
+}
+
+function buildPlanApprovalResult(body = {}) {
+  const raw = String(body.decision || body.action || 'approve').toLowerCase().replace(/[\s-]+/g, '_');
+  let decision = 'approve';
+  if (raw === 'request_changes' || raw === 'requestchanges' || raw === 'changes') decision = 'request_changes';
+  else if (raw === 'quit' || raw === 'reject' || raw === 'abandon' || raw === 'deny') decision = 'quit';
+  else if (raw === 'approve' || raw === 'accept' || raw === 'yes') decision = 'approve';
+  const feedback = body.feedback != null ? String(body.feedback) : (body.message != null ? String(body.message) : '');
+  return { decision, feedback };
+}
+
 function readSummary(sessionDir) {
   try {
     const raw = JSON.parse(fs.readFileSync(path.join(sessionDir, 'summary.json'), 'utf8'));
@@ -804,6 +868,8 @@ class GrokBridge {
           fs: { readTextFile: true, writeTextFile: true },
           // Agent runs tools itself; client terminal protocol is not implemented.
         },
+        // Advertise interactive ask-user support (agent expects a bool).
+        _meta: { askUserQuestion: true },
       }).then((result) => {
         this.send({ jsonrpc: '2.0', method: 'initialized', params: {} });
         this.agentCapabilities = result?.agentCapabilities || {};
@@ -953,6 +1019,25 @@ class GrokBridge {
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
       fs.writeFileSync(resolved, String(content), 'utf8');
       this.respond(id, {});
+      return;
+    }
+
+    if (method === '_x.ai/ask_user_question' || method === 'x.ai/ask_user_question') {
+      console.log('[ask_user_question] params keys:', Object.keys(params || {}),
+        'questions:', Array.isArray(params.questions) ? params.questions.length : 0);
+      broadcast({ type: 'ask_user_question', request: message });
+      return;
+    }
+
+    if (method === '_x.ai/exit_plan_mode' || method === 'x.ai/exit_plan_mode') {
+      console.log('[exit_plan_mode] params keys:', Object.keys(params || {}));
+      const { planText, planPath } = readPlanForExit(params);
+      broadcast({
+        type: 'exit_plan_mode',
+        request: message,
+        planText,
+        planPath,
+      });
       return;
     }
 
@@ -1521,6 +1606,36 @@ async function api(req, res, pathname) {
     const selected = options.find((option) => pattern.test(option.optionId || option.id || option.name || ''));
     if (!selected) return json(res, 400, { error: 'Requested decision is unavailable' });
     bridge.respond(requestId, { outcome: { outcome: 'selected', optionId: selected.optionId || selected.id } });
+    return json(res, 200, { ok: true });
+  }
+
+  const askUserMatch = pathname.match(/^\/api\/ask-user\/([^/]+)$/);
+  if (askUserMatch && req.method === 'POST') {
+    const requestId = decodeURIComponent(askUserMatch[1]);
+    const pending = bridge.serverRequests.get(requestId);
+    const method = pending?.method || '';
+    if (!pending || (method !== '_x.ai/ask_user_question' && method !== 'x.ai/ask_user_question')) {
+      return json(res, 404, { error: 'Ask-user request not found' });
+    }
+    const body = await readJson(req);
+    const result = buildAskUserResult(body, pending.params || {});
+    console.log('[ask_user_question] responding', requestId, JSON.stringify(result).slice(0, 800));
+    bridge.respond(requestId, result);
+    return json(res, 200, { ok: true });
+  }
+
+  const planApprovalMatch = pathname.match(/^\/api\/plan-approval\/([^/]+)$/);
+  if (planApprovalMatch && req.method === 'POST') {
+    const requestId = decodeURIComponent(planApprovalMatch[1]);
+    const pending = bridge.serverRequests.get(requestId);
+    const method = pending?.method || '';
+    if (!pending || (method !== '_x.ai/exit_plan_mode' && method !== 'x.ai/exit_plan_mode')) {
+      return json(res, 404, { error: 'Plan approval request not found' });
+    }
+    const body = await readJson(req);
+    const result = buildPlanApprovalResult(body);
+    console.log('[exit_plan_mode] responding', requestId, result);
+    bridge.respond(requestId, result);
     return json(res, 200, { ok: true });
   }
 

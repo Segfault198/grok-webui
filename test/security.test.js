@@ -253,6 +253,29 @@ test('gallery and real permission presets are wired through server and UI', () =
   assert.match(app, /function renderGallery/);
 });
 
+test('ask_user_question and exit_plan_mode are handled interactively', () => {
+  assert.match(server, /askUserQuestion:\s*true/);
+  assert.match(server, /_x\.ai\/ask_user_question/);
+  assert.match(server, /_x\.ai\/exit_plan_mode/);
+  assert.match(server, /pathname\.match\(\/\^\\\/api\\\/ask-user/);
+  assert.match(server, /pathname\.match\(\/\^\\\/api\\\/plan-approval/);
+  assert.match(server, /function buildAskUserResult/);
+  assert.match(server, /function buildPlanApprovalResult/);
+  assert.match(server, /partial_answers/);
+  assert.match(server, /type: 'ask_user_question'/);
+  assert.match(server, /type: 'exit_plan_mode'/);
+  assert.match(html, /id="ask-user-modal"/);
+  assert.match(html, /id="plan-approval-modal"/);
+  assert.match(html, /id="ask-user-submit"/);
+  assert.match(html, /id="plan-approve"/);
+  assert.match(app, /openAskUserModal/);
+  assert.match(app, /openPlanApprovalModal/);
+  assert.match(app, /\/api\/ask-user\//);
+  assert.match(app, /\/api\/plan-approval\//);
+  assert.match(app, /ask_user_question/);
+  assert.match(app, /exit_plan_mode/);
+});
+
 test('chat media resolves session-relative paths and serves GROK_HOME artifacts', () => {
   assert.match(app, /function resolveLocalPath/);
   assert.match(app, /state\.cwd/);

@@ -287,6 +287,54 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .approval-icon { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--amber); color: #17130a; font-weight: 800; }
 .approval-copy { min-width: 0; flex: 1; }.approval-copy p { margin: 4px 0 0; color: var(--muted); font-size: .78rem; overflow-wrap: anywhere; }
 .approval-actions { display: flex; gap: 8px; }
+
+.ask-modal, .plan-modal {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
+  padding: 16px; background: rgba(4, 5, 10, .78); backdrop-filter: blur(8px);
+}
+.ask-modal.hidden, .plan-modal.hidden { display: none !important; }
+.ask-dialog, .plan-dialog {
+  position: relative; width: min(640px, 100%); max-height: min(88dvh, 920px);
+  overflow: auto; padding: 22px 20px 16px; border: 1px solid var(--border);
+  border-radius: 18px; background: var(--panel); box-shadow: var(--shadow);
+}
+.plan-dialog { width: min(720px, 100%); }
+.ask-close, .plan-close { position: absolute; top: 10px; right: 10px; }
+.ask-dialog h2, .plan-dialog h2 { margin: 0 32px 6px 0; font-size: 1.15rem; }
+.ask-lede, .plan-lede { margin: 0 0 14px; color: var(--muted); font-size: .86rem; line-height: 1.5; }
+.ask-questions { display: grid; gap: 14px; margin-bottom: 14px; }
+.ask-question {
+  padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-2);
+}
+.ask-question h3 { margin: 0 0 8px; font-size: .92rem; line-height: 1.4; }
+.ask-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.ask-option {
+  min-height: 38px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg); color: var(--text); font: inherit; font-size: .82rem; cursor: pointer; text-align: left;
+}
+.ask-option small { display: block; margin-top: 3px; color: var(--muted); font-size: .7rem; }
+.ask-option.selected { border-color: var(--accent); background: rgba(139,156,255,.12); }
+.ask-other { width: 100%; margin-top: 8px; min-height: 38px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; }
+.ask-actions, .plan-actions {
+  display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px;
+}
+.ask-actions button, .plan-actions button { min-height: 40px; }
+.plan-preview {
+  max-height: min(48dvh, 480px); overflow: auto; margin: 0 0 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--bg);
+  color: var(--text); font: 0.8rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.plan-feedback-label { display: block; margin: 0 0 6px; color: var(--muted); font-size: .78rem; font-weight: 650; }
+#plan-approval-feedback {
+  width: 100%; min-height: 72px; margin-bottom: 12px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text);
+  font: inherit; resize: vertical;
+}
+@media (max-width: 560px) {
+  .ask-actions, .plan-actions { flex-direction: column-reverse; }
+  .ask-actions button, .plan-actions button { width: 100%; }
+}
 .gallery-dialog { width: min(920px, 100%); }
 .gallery-toolbar { display: flex; gap: 10px; margin: 12px 0; }
 .gallery-toolbar select { min-height: 38px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg); color: var(--text); }
