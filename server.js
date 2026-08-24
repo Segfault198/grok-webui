@@ -12,6 +12,7 @@ const { spawn } = require('node:child_process');
 const PROJECT_ROOT = __dirname;
 const PUBLIC_ROOT = path.join(PROJECT_ROOT, 'public');
 const UPLOAD_ROOT = path.join(PROJECT_ROOT, 'data', 'uploads');
+const SESSION_STORE = path.join(PROJECT_ROOT, 'data', 'auth-sessions.json');
 const AMT_STORE = path.join(PROJECT_ROOT, 'data', 'amt.json');
 const AMT_BASE = process.env.AMT_BASE_URL || 'https://agentmediatools.com';
 
@@ -47,6 +48,35 @@ const loginAttempts = new Map();
 const sseClients = new Set();
 
 fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+
+function sessionKey(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+function saveSessions() {
+  const now = Date.now();
+  for (const [key, expires] of sessions) if (expires < now) sessions.delete(key);
+  const temporary = `${SESSION_STORE}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify([...sessions]), { mode: 0o600 });
+  fs.renameSync(temporary, SESSION_STORE);
+}
+
+function loadSessions() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(SESSION_STORE, 'utf8'));
+    const now = Date.now();
+    for (const entry of saved) {
+      if (Array.isArray(entry) && /^[a-f0-9]{64}$/.test(entry[0]) && Number(entry[1]) > now) {
+        sessions.set(entry[0], Number(entry[1]));
+      }
+    }
+    saveSessions();
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.warn(`Could not restore login sessions: ${error.message}`);
+  }
+}
+
+loadSessions();
 
 function setupRequired() {
   return !passwordSalt || !passwordHash;
@@ -128,7 +158,8 @@ function persistAuth({ username, salt, hash }) {
 
 function issueSession(res) {
   const token = crypto.randomBytes(32).toString('base64url');
-  sessions.set(token, Date.now() + SESSION_HOURS * 3600000);
+  sessions.set(sessionKey(token), Date.now() + SESSION_HOURS * 3600000);
+  saveSessions();
   return json(res, 200, { ok: true }, {
     'Set-Cookie': `grok_webui_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}`,
   });
@@ -154,9 +185,10 @@ function parseCookies(req) {
 
 function authenticated(req) {
   const token = parseCookies(req).grok_webui_session;
-  const expires = token && sessions.get(token);
+  const key = token && sessionKey(token);
+  const expires = key && sessions.get(key);
   if (!expires || expires < Date.now()) {
-    if (token) sessions.delete(token);
+    if (key && sessions.delete(key)) saveSessions();
     return false;
   }
   return true;
@@ -1322,7 +1354,8 @@ async function api(req, res, pathname) {
 
   if (pathname === '/api/logout' && req.method === 'POST') {
     const token = parseCookies(req).grok_webui_session;
-    sessions.delete(token);
+    if (token) sessions.delete(sessionKey(token));
+    saveSessions();
     return json(res, 200, { ok: true }, {
       'Set-Cookie': 'grok_webui_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0',
     });

@@ -30,6 +30,13 @@ test('authentication uses a timing-safe password hash and HttpOnly strict cookie
   assert.doesNotMatch(server, /Missing PASSWORD_SALT or PASSWORD_HASH/);
 });
 
+test('hashed login sessions persist across service restarts', () => {
+  assert.match(server, /auth-sessions\.json/);
+  assert.match(server, /createHash\('sha256'\)/);
+  assert.match(server, /function loadSessions\(\)/);
+  assert.match(server, /function saveSessions\(\)/);
+});
+
 test('system-reminder user_message chunks are filtered from chat transcript', () => {
   assert.match(app, /function isSystemReminderText/);
   assert.match(app, /Hidden system reminder/);

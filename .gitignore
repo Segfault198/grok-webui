@@ -3,6 +3,7 @@
 node_modules/
 data/uploads/
 data/amt.json
+data/auth-sessions.json
 *.log
 .DS_Store
 coverage/
