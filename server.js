@@ -903,7 +903,7 @@ class GrokBridge {
         // Advertise interactive ask-user support (agent expects a bool).
         _meta: { askUserQuestion: true },
       }).then((result) => {
-        this.send({ jsonrpc: '2.0', method: 'initialized', params: {} });
+        // ACP initialize is request/response only (no LSP/MCP-style initialized notify).
         this.agentCapabilities = result?.agentCapabilities || {};
         resolve(result);
       }, reject);
