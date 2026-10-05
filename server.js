@@ -514,28 +514,82 @@ function readPlanForExit(params = {}) {
 }
 
 /** Build ExtResponse for ask_user_question from the browser POST body. */
+function askUserAnswerKey(q, i) {
+  return (q && (q.question || q.prompt || q.id)) || String(i);
+}
+
+/** Map UI {selected,other} (or raw string/array) to Grok StringOrVec. */
+function askUserStringOrVec(raw, q) {
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) return raw.map(String);
+  if (!raw || typeof raw !== 'object') return '';
+  const selected = Array.isArray(raw.selected) ? raw.selected.map(String) : [];
+  const other = raw.other != null && String(raw.other).trim() ? String(raw.other).trim() : '';
+  const multi = !!(q && (q.multi_select || q.multiSelect));
+  if (other && !selected.length) return other;
+  if (other && selected.length) {
+    const vals = selected.concat([other]);
+    return multi || vals.length > 1 ? vals : vals[0];
+  }
+  if (!selected.length) return multi ? [] : '';
+  return multi || selected.length > 1 ? selected : selected[0];
+}
+
+/** Build answers map keyed by question text (Grok HashMap, not an array). */
+function askUserAnswersMap(list, questions, { fillDefaults = false } = {}) {
+  const map = {};
+  if (list && typeof list === 'object' && !Array.isArray(list)) {
+    for (const [key, value] of Object.entries(list)) {
+      const qi = questions.findIndex((q, idx) => askUserAnswerKey(q, idx) === key || q?.question === key);
+      map[key] = askUserStringOrVec(value, qi >= 0 ? questions[qi] : null);
+    }
+    return map;
+  }
+  const arr = Array.isArray(list) ? list : [];
+  const n = fillDefaults ? Math.max(arr.length, questions.length) : arr.length;
+  for (let i = 0; i < n; i += 1) {
+    const q = questions[i] || {};
+    const key = askUserAnswerKey(q, i);
+    if (i < arr.length) {
+      map[key] = askUserStringOrVec(arr[i], q);
+    } else if (fillDefaults) {
+      const first = q?.options?.[0]?.label || q?.options?.[0]?.name || '';
+      const multi = !!(q.multi_select || q.multiSelect);
+      map[key] = multi ? (first ? [first] : []) : first;
+    }
+  }
+  return map;
+}
+
 function buildAskUserResult(body = {}, pendingParams = {}) {
-  // Unit variants: serde externally-tagged (SkipInterview / ChatAboutThis).
+  // Grok AskUserQuestionExtResponse: internally tagged on outcome (snake_case).
   if (body.skip || body.skipInterview || body.skip_interview) {
-    return { SkipInterview: null };
+    return { outcome: 'skip_interview' };
   }
   if (body.chatAboutThis || body.chat_about_this) {
-    return { ChatAboutThis: null };
+    return { outcome: 'chat_about_this' };
+  }
+  if (body.cancelled || body.cancel || body.canceled) {
+    return { outcome: 'cancelled' };
   }
 
   const questions = Array.isArray(pendingParams.questions) ? pendingParams.questions : [];
-  let answers = body.answers;
-  if (!Array.isArray(answers)) {
-    answers = questions.map((q) => {
-      const first = q?.options?.[0]?.label || q?.options?.[0]?.name || null;
-      return { selected: first ? [first] : [], other: null };
+  const answers = body.answers == null
+    ? askUserAnswersMap([], questions, { fillDefaults: true })
+    : askUserAnswersMap(body.answers, questions, {
+      fillDefaults: Array.isArray(body.answers) && body.answers.length === 0,
     });
+
+  // UI sends partial_answers: [] on a normal accept — keep {}.
+  const rawPartial = body.partial_answers != null ? body.partial_answers : body.partialAnswers;
+  let partial_answers = {};
+  if (Array.isArray(rawPartial)) {
+    if (rawPartial.length) partial_answers = askUserAnswersMap(rawPartial, questions);
+  } else if (rawPartial && typeof rawPartial === 'object') {
+    partial_answers = askUserAnswersMap(rawPartial, questions);
   }
-  const partial = Array.isArray(body.partial_answers)
-    ? body.partial_answers
-    : (Array.isArray(body.partialAnswers) ? body.partialAnswers : []);
-  // Accepted: prefer flat { answers, partial_answers } (untagged / field match).
-  return { answers, partial_answers: partial };
+
+  return { outcome: 'accepted', answers, partial_answers };
 }
 
 function buildPlanApprovalResult(body = {}) {
