@@ -260,6 +260,17 @@ test('gallery and real permission presets are wired through server and UI', () =
   assert.match(app, /function renderGallery/);
 });
 
+
+test('pending interactive gates are replayed to new SSE clients', () => {
+  assert.match(server, /function pendingGatePayload/);
+  assert.match(server, /function replayPendingGates/);
+  assert.match(server, /replayPendingGates\(res\)/);
+  // Same event types as live broadcast — UI already handles these.
+  assert.match(server, /type: 'ask_user_question'/);
+  assert.match(server, /type: 'permission_request'/);
+  assert.match(server, /type: 'exit_plan_mode'/);
+});
+
 test('ask_user_question and exit_plan_mode are handled interactively', () => {
   assert.match(server, /askUserQuestion:\s*true/);
   assert.match(server, /_x\.ai\/ask_user_question/);

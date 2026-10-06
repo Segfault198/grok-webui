@@ -467,6 +467,44 @@ function broadcast(payload) {
   }
 }
 
+
+/** SSE payload for a pending interactive agent gate (same shape as live broadcast). */
+function pendingGatePayload(message) {
+  const method = message?.method || '';
+  if (method === '_x.ai/ask_user_question' || method === 'x.ai/ask_user_question') {
+    return { type: 'ask_user_question', request: message };
+  }
+  if (method === '_x.ai/exit_plan_mode' || method === 'x.ai/exit_plan_mode') {
+    const { planText, planPath } = readPlanForExit(message.params || {});
+    return {
+      type: 'exit_plan_mode',
+      request: message,
+      planText,
+      planPath,
+    };
+  }
+  if (method === 'session/request_permission') {
+    const sessionId = message.params?.sessionId || message.params?.toolCall?.sessionId;
+    const mode = bridge.permissionModes.get(sessionId) || 'moderate';
+    return { type: 'permission_request', request: message, permissionMode: mode };
+  }
+  return null;
+}
+
+/** Replay open gates to one SSE client (reconnect / second device). Does not re-broadcast. */
+function replayPendingGates(res) {
+  for (const message of bridge.serverRequests.values()) {
+    const payload = pendingGatePayload(message);
+    if (!payload) continue;
+    try {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    } catch {
+      return;
+    }
+  }
+}
+
 function safeSessionId(id) {
   if (typeof id !== 'string' || !/^[0-9a-fA-F-]{8,64}$/.test(id)) {
     throw Object.assign(new Error('Invalid session id'), { status: 400 });
@@ -1403,6 +1441,9 @@ async function api(req, res, pathname) {
       activeSessions: [...bridge.activeSessions.values()],
     })}\n\n`);
     sseClients.add(res);
+    // Late clients (second browser/device, SSE reconnect) missed the one-shot
+    // broadcast; replay still-open interactive gates to this client only.
+    replayPendingGates(res);
     const heartbeat = setInterval(() => {
       try { res.write(`: ping ${Date.now()}\n\n`); }
       catch {
