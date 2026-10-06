@@ -271,6 +271,18 @@ test('pending interactive gates are replayed to new SSE clients', () => {
   assert.match(server, /type: 'exit_plan_mode'/);
 });
 
+test('resolved interactive gates are broadcast so peer UIs dismiss', () => {
+  assert.match(server, /broadcast\(\{ type: 'ask_user_resolved', requestId: pending\.id \}\)/);
+  assert.match(server, /broadcast\(\{ type: 'permission_resolved', requestId: pending\.id \}\)/);
+  assert.match(server, /broadcast\(\{ type: 'plan_approval_resolved', requestId: pending\.id \}\)/);
+  assert.match(app, /payload\.type === 'ask_user_resolved'/);
+  assert.match(app, /payload\.type === 'permission_resolved'/);
+  assert.match(app, /payload\.type === 'plan_approval_resolved'/);
+  assert.match(app, /hideAskUserModal\(\)/);
+  assert.match(app, /hidePlanApprovalModal\(\)/);
+  assert.match(app, /#approval-drawer'\)\.classList\.add\('hidden'\)/);
+});
+
 test('ask_user_question and exit_plan_mode are handled interactively', () => {
   assert.match(server, /askUserQuestion:\s*true/);
   assert.match(server, /_x\.ai\/ask_user_question/);

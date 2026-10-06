@@ -1682,6 +1682,7 @@ async function api(req, res, pathname) {
     // Preserve original JSON-RPC id type (number vs string) from the agent request.
     console.log('[permissions] responding id=', pending.id, 'typeof=', typeof pending.id);
     bridge.respond(pending.id, { outcome: { outcome: 'selected', optionId: selected.optionId || selected.id } });
+    broadcast({ type: 'permission_resolved', requestId: pending.id });
     return json(res, 200, { ok: true });
   }
 
@@ -1698,6 +1699,7 @@ async function api(req, res, pathname) {
     // Preserve original JSON-RPC id type (number vs string) from the agent request.
     console.log('[ask_user_question] responding id=', pending.id, 'typeof=', typeof pending.id, JSON.stringify(result).slice(0, 800));
     bridge.respond(pending.id, result);
+    broadcast({ type: 'ask_user_resolved', requestId: pending.id });
     return json(res, 200, { ok: true });
   }
 
@@ -1714,6 +1716,7 @@ async function api(req, res, pathname) {
     // Preserve original JSON-RPC id type (number vs string) from the agent request.
     console.log('[exit_plan_mode] responding id=', pending.id, 'typeof=', typeof pending.id, result);
     bridge.respond(pending.id, result);
+    broadcast({ type: 'plan_approval_resolved', requestId: pending.id });
     return json(res, 200, { ok: true });
   }
 

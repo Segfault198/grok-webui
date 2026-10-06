@@ -2174,10 +2174,23 @@ if ($('#composer-form')) {
         const params = payload.request?.params || {};
         $('#approval-summary').textContent = params.toolCall?.title || params.title || params.toolName || 'Grok wants to run a protected action.';
         $('#approval-drawer').classList.remove('hidden');
+      } else if (payload.type === 'permission_resolved') {
+        if (state.pendingPermission && String(state.pendingPermission.id) === String(payload.requestId)) {
+          state.pendingPermission = null;
+          $('#approval-drawer').classList.add('hidden');
+        }
       } else if (payload.type === 'ask_user_question') {
         openAskUserModal(payload.request);
+      } else if (payload.type === 'ask_user_resolved') {
+        if (state.pendingAskUser && String(state.pendingAskUser.id) === String(payload.requestId)) {
+          hideAskUserModal();
+        }
       } else if (payload.type === 'exit_plan_mode') {
         openPlanApprovalModal(payload.request, payload.planText || '', payload.planPath || null);
+      } else if (payload.type === 'plan_approval_resolved') {
+        if (state.pendingPlanApproval && String(state.pendingPlanApproval.id) === String(payload.requestId)) {
+          hidePlanApprovalModal();
+        }
       }
     };
   }
