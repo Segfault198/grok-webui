@@ -324,3 +324,73 @@ test('cancel is exposed for in-flight turns', () => {
   assert.match(app, /\/cancel/);
   assert.match(html, /id="interrupt"/);
 });
+
+function isolateFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.notEqual(start, -1, `${name} missing`);
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return new Function(`${source.slice(start, i + 1)}\nreturn ${name};`)();
+      }
+    }
+  }
+  assert.fail(`${name} unterminated`);
+}
+
+test('new chat ignores foreign session streams but keeps background activity', () => {
+  const shouldApply = isolateFunction(app, 'shouldApplySessionEvent');
+  // Fail closed when New chat has no current session.
+  assert.equal(shouldApply(null, 'sess-a'), false);
+  assert.equal(shouldApply(undefined, 'sess-a'), false);
+  assert.equal(shouldApply('sess-a', 'sess-b'), false);
+  // Same session, and unscoped events (no session id), still apply.
+  assert.equal(shouldApply('sess-a', 'sess-a'), true);
+  assert.equal(shouldApply(null, null), true);
+  assert.equal(shouldApply(null, ''), true);
+  assert.equal(shouldApply('sess-a', undefined), true);
+
+  assert.match(app, /if \(!shouldApplySessionEvent\(state\.sessionId, sessionId\)\)/);
+  assert.doesNotMatch(app, /if \(sessionId && state\.sessionId && sessionId !== state\.sessionId\)/);
+
+  const handler = app.slice(app.indexOf('function handleGrokEvent'));
+  const foreign = handler.slice(
+    handler.indexOf('shouldApplySessionEvent'),
+    handler.indexOf('// Live session/update stream'),
+  );
+  assert.match(foreign, /_x\.ai\/queue\/changed/);
+  assert.match(foreign, /runningPromptId/);
+  assert.match(foreign, /activeSessionIds\.add\(sessionId\)/);
+  assert.match(foreign, /_x\.ai\/session\/prompt_complete/);
+  assert.match(foreign, /turn_completed/);
+  assert.match(foreign, /activeSessionIds\.delete\(sessionId\)/);
+  assert.match(foreign, /return;/);
+
+  const fresh = app.slice(app.indexOf('function newSession()'), app.indexOf('async function ensureSession'));
+  assert.match(fresh, /state\.awaitingTurn = false/);
+  assert.match(fresh, /stopResyncLoop\(\)/);
+  assert.match(fresh, /clearCatchupTimers\(\)/);
+  assert.match(fresh, /state\.streamingNode = null/);
+  assert.match(fresh, /state\.streamingMessageId = null/);
+  assert.doesNotMatch(fresh, /\/cancel|session\/cancel/);
+  const clearedAt = fresh.indexOf('state.sessionId = null');
+  const stoppedAt = fresh.indexOf('setRunning(false)');
+  assert.ok(clearedAt !== -1 && stoppedAt !== -1 && clearedAt < stoppedAt);
+
+  // In-flight disk pulls must not render onto New chat or a switched session.
+  assert.match(app, /const pinnedSessionId = state\.sessionId/);
+  assert.equal(
+    (app.match(/if \(state\.sessionId !== pinnedSessionId\) return;/g) || []).length,
+    2,
+  );
+
+  // Top-level prompt events already require equality, so a null current session skips them.
+  assert.match(app, /payload\.type === 'prompt_started' && payload\.sessionId === state\.sessionId/);
+  assert.match(app, /payload\.type === 'prompt_finished' && payload\.sessionId === state\.sessionId/);
+  assert.match(app, /payload\.type === 'prompt_error' && payload\.sessionId === state\.sessionId/);
+  assert.match(app, /payload\.type === 'prompt_cancelled' && payload\.sessionId === state\.sessionId/);
+});

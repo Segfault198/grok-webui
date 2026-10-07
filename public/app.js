@@ -128,6 +128,16 @@ async function initAuthPage() {
 
 initAuthPage();
 
+/**
+ * Whether a live event should update the open chat.
+ * Fail closed when the event names a session and the open chat is unset
+ * (New chat) or a different session. Events with no session id still apply.
+ */
+function shouldApplySessionEvent(currentId, eventSessionId) {
+  if (!eventSessionId) return true;
+  return eventSessionId === currentId;
+}
+
 if ($('#composer-form')) {
   const state = {
     sessionId: null,
@@ -1442,7 +1452,8 @@ if ($('#composer-form')) {
   }
 
   async function resyncSession({ force = false, full = false } = {}) {
-    if (!state.sessionId) return;
+    const pinnedSessionId = state.sessionId;
+    if (!pinnedSessionId) return;
     // Coalesce concurrent pulls so we never drop a catch-up after a turn ends.
     if (state.resyncInFlight) {
       state.resyncPending = {
@@ -1456,11 +1467,13 @@ if ($('#composer-form')) {
       const turnInFlight = state.running || state.awaitingTurn;
       // Mid-turn polls use a tiny tail payload so phones are not re-downloading multi-MB history every 2s.
       const useLite = turnInFlight && !full;
-      const result = await request(sessionHistoryUrl(state.sessionId, {
+      const result = await request(sessionHistoryUrl(pinnedSessionId, {
         lite: useLite,
         messages: historyPageSize(),
         tools: historyToolLimit(),
       }));
+      // New chat or a session switch happened while this pull was in flight.
+      if (state.sessionId !== pinnedSessionId) return;
       const messages = result.messages || [];
       const tools = result.tools || [];
       if (!useLite) noteHistoryMeta(result);
@@ -1516,11 +1529,12 @@ if ($('#composer-form')) {
         // One clean rebuild now that the turn is done and disk should be complete.
         // Prefer a full (bounded) history window rather than the lite tail.
         const fullResult = useLite
-          ? await request(sessionHistoryUrl(state.sessionId, {
+          ? await request(sessionHistoryUrl(pinnedSessionId, {
             messages: historyPageSize(),
             tools: historyToolLimit(),
           }))
           : result;
+        if (state.sessionId !== pinnedSessionId) return;
         const fullMessages = fullResult.messages || messages;
         const fullTools = fullResult.tools || tools;
         noteHistoryMeta(fullResult);
@@ -1665,6 +1679,13 @@ if ($('#composer-form')) {
     localStorage.removeItem('grok-webui-active-session');
     state.streamingNode = null;
     state.streamingMessageId = null;
+    // Leave the prior ACP turn running. Drop local wait/resync so its
+    // completion cannot repaint this empty chat. setRunning(false) below
+    // runs after sessionId is cleared, so the abandoned id stays in
+    // activeSessionIds when it was already running.
+    state.awaitingTurn = false;
+    stopResyncLoop();
+    clearCatchupTimers();
     state.optimisticUsers = [];
     state.historyFingerprint = '';
     state.historyTotalMessages = 0;
@@ -1959,8 +1980,8 @@ if ($('#composer-form')) {
     const update = params.update || {};
     const updateType = update.sessionUpdate || '';
 
-    if (sessionId && state.sessionId && sessionId !== state.sessionId) {
-      // Still track activity for other sessions
+    if (!shouldApplySessionEvent(state.sessionId, sessionId)) {
+      // Still track activity for other sessions (incl. New chat = null current)
       if (method === '_x.ai/queue/changed' && params.runningPromptId) {
         state.activeSessionIds.add(sessionId);
         renderSessions();
