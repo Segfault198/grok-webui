@@ -324,3 +324,39 @@ test('cancel is exposed for in-flight turns', () => {
   assert.match(app, /\/cancel/);
   assert.match(html, /id="interrupt"/);
 });
+
+test('send from New chat drops grok-webui-draft:new before the session id changes', () => {
+  assert.match(app, /function clearNewDraft/);
+  assert.match(app, /localStorage\.removeItem\('grok-webui-draft:new'\)/);
+  const send = app.slice(app.indexOf('async function sendMessage'), app.indexOf('function markTurnComplete'));
+  const clearNewAt = send.indexOf('clearNewDraft()');
+  const ensureAt = send.indexOf('await ensureSession()');
+  const clearDraftAt = send.lastIndexOf('clearDraft()');
+  assert.ok(clearNewAt !== -1 && ensureAt !== -1 && clearNewAt < ensureAt,
+    'clearNewDraft must run before ensureSession so :new is not orphaned');
+  assert.ok(clearDraftAt !== -1 && ensureAt < clearDraftAt,
+    'clearDraft still runs after send once the real session id is known');
+});
+
+test('openSession clears the composer before restoring a session draft', () => {
+  const open = app.slice(app.indexOf('async function openSession'), app.indexOf('function newSession'));
+  const clearAt = open.indexOf("$('#message').value = ''");
+  const restoreAt = open.indexOf('restoreDraft()');
+  assert.ok(clearAt !== -1 && restoreAt !== -1 && clearAt < restoreAt,
+    'a session with no draft must not keep the previous composer text');
+  // Unfinished New chat still restores draft:new after clearing the textarea.
+  const fresh = app.slice(app.indexOf('function newSession()'), app.indexOf('async function ensureSession'));
+  assert.match(fresh, /\$\('#message'\)\.value = ''/);
+  assert.match(fresh, /restoreDraft\(\)/);
+  assert.ok(fresh.indexOf("$('#message').value = ''") < fresh.indexOf('restoreDraft()'));
+});
+
+test('queue-while-running staging clears the composer draft', () => {
+  const start = app.indexOf("$('#composer-form').addEventListener('submit'");
+  assert.notEqual(start, -1, 'composer submit handler missing');
+  const submit = app.slice(start, app.indexOf("$('#queue-later')", start));
+  const running = submit.slice(submit.indexOf('if (state.running)'), submit.indexOf('sendMessage(text)'));
+  assert.match(running, /state\.stagedMessage/);
+  assert.match(running, /input\.value = ''/);
+  assert.match(running, /clearDraft\(\)/);
+});

@@ -774,8 +774,12 @@ if ($('#composer-form')) {
       }
     } catch { /* ignore */ }
   }
+  function clearNewDraft() {
+    try { localStorage.removeItem('grok-webui-draft:new'); } catch { /* ignore */ }
+  }
   function clearDraft() {
     try { localStorage.removeItem(draftKey()); } catch { /* ignore */ }
+    clearNewDraft();
   }
 
   function notifyTurnComplete(title = 'Grok finished') {
@@ -1636,6 +1640,10 @@ if ($('#composer-form')) {
       else state.activeSessionIds.delete(state.sessionId);
       setRunning(Boolean(result.active));
       renderSessions();
+      if ($('#message')) {
+        $('#message').value = '';
+        $('#message').style.height = '';
+      }
       restoreDraft();
       $('#sidebar').classList.remove('open');
       if (result.messagesTruncated || result.toolsTruncated) {
@@ -1884,6 +1892,8 @@ if ($('#composer-form')) {
       attachments,
     };
     try {
+      // Session id is still null here; remove the New-chat key before it changes.
+      clearNewDraft();
       const sessionId = await ensureSession();
       state.optimisticUsers.push(optimistic);
       addMessage('user', cleaned, false, { attachments });
@@ -2373,6 +2383,7 @@ if ($('#composer-form')) {
       state.stagedMessage = { text, attachments: state.attachments.map((file) => ({ ...file })) };
       input.value = '';
       input.style.height = '';
+      clearDraft();
       $('#queue-choice').classList.remove('hidden');
       return;
     }
