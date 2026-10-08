@@ -88,6 +88,27 @@ test('optimistic user messages survive history resync until disk catches up', ()
   assert.match(app, /const turnInFlight = state\.running \|\| state\.awaitingTurn/);
 });
 
+test('renderHistory reapplies optimistic users only while a turn is in flight', () => {
+  const start = app.indexOf('function renderHistory(');
+  const end = app.indexOf('\n  function ', start + 1);
+  assert.ok(start >= 0 && end > start);
+  const body = app.slice(start, end);
+  assert.match(
+    body,
+    /if \(state\.running \|\| state\.awaitingTurn\) \{\s*reapplyOptimisticUsers\(\);\s*\} else \{\s*state\.optimisticUsers = \[\];\s*\}/,
+  );
+  assert.equal((body.match(/reapplyOptimisticUsers\(/g) || []).length, 1);
+
+  const openStart = app.indexOf('async function openSession(');
+  const openEnd = app.indexOf('\n  function ', openStart + 1);
+  assert.ok(openStart >= 0 && openEnd > openStart);
+  const openBody = app.slice(openStart, openEnd);
+  const clearAt = openBody.indexOf('state.optimisticUsers = []');
+  const renderAt = openBody.indexOf('renderHistory(');
+  assert.ok(clearAt >= 0);
+  assert.ok(renderAt > clearAt);
+});
+
 test('chat messages render lightweight markdown into safe DOM (not raw pre-wrap only)', () => {
   assert.match(app, /function renderRichText/);
   assert.match(app, /function appendInlineMarkdown/);

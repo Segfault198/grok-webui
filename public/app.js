@@ -1344,8 +1344,12 @@ if ($('#composer-form')) {
       } else if (message.role === 'assistant') addMessage('assistant', message.text);
       else if (message.role === 'plan' && message.entries) renderPlan(message.entries, message.explanation || '');
     }
-    // Keep unsent-to-disk user bubbles visible across history reloads.
-    reapplyOptimisticUsers();
+    // Keep unsent-to-disk user bubbles only while a turn is still in flight.
+    if (state.running || state.awaitingTurn) {
+      reapplyOptimisticUsers();
+    } else {
+      state.optimisticUsers = [];
+    }
     // Only paint a bounded tail of tools — full tool history can be 800+ rows.
     const toolCap = historyToolLimit();
     const toolSlice = tools.length > toolCap ? tools.slice(-toolCap) : tools;
