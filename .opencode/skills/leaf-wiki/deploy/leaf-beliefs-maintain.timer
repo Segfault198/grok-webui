@@ -1,9 +1,0 @@
-[Unit]
-Description=Daily leaf belief maintenance (deterministic)
-
-[Timer]
-OnCalendar=*-*-* 07:15:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target

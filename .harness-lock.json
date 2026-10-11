@@ -1,5 +1,5 @@
 {
-  "synced_at": "2026-10-11T04:35:42Z",
+  "synced_at": "2026-10-11T04:38:19Z",
   "mark_ii": {
     "commit": "54fff5f88a2fd538e55f612f6858c802bda2ed2f",
     "short": "54fff5f",
@@ -21,14 +21,10 @@
   "overlay": ".harness/overlay.yaml",
   "project_name": "grok-webui",
   "targets": [
-    "grok",
-    "opencode",
-    "copilot"
+    "grok"
   ],
   "adapters": [
-    "grok",
-    "opencode",
-    "copilot"
+    "grok"
   ],
   "skills_installed": [
     "leaf-wiki"

@@ -1,7 +1,0 @@
-# Copy to _meta/promotion-queue/YYYY-MM-DD-<slug>.yaml
-# source MUST be an existing leaf article path.
-
-source: articles/<slug>.md
-topic: <suggested-hub-topic>
-reason: <one line — why this graduates>
-confidence: high
