@@ -1,0 +1,44 @@
+project_name: grok-webui
+adapters:
+- grok
+- opencode
+- copilot
+roadmap_path: docs/next-steps.md
+wiki_index: .wiki/index.md
+wiki_summary: .wiki/articles/project-summary.md
+verify_commands:
+- npm test
+- npm run check
+plan_b: false
+skills:
+  default:
+  - leaf-wiki
+  optional: []
+notes: 'Initialized by scripts/init-project.py with seats/mouths: grok, opencode,
+  copilot.
+
+  Edit models / paths / optional skills here, then re-run sync-harness.
+
+  Plan B (worktree leases) is OpenCode-optional; ops-toolbox plan_b left alone elsewhere.
+
+  '
+opencode:
+  update_prompts_only: true
+  agents_md: AGENTS.md
+  session_init: SessionInit.md
+  opencode_json: opencode.json
+  instructions:
+  - SessionInit.md
+  default_agent: router
+  agents: {}
+grok:
+  output: .grok/AGENTS.md
+  skills_dir: .grok/skills
+copilot:
+  output: .github/copilot-instructions.md
+hzr_skills:
+  repo: Segfault198/hzr-skills
+seats:
+- grok
+- opencode
+- copilot

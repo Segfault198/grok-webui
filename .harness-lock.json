@@ -1,0 +1,38 @@
+{
+  "synced_at": "2026-10-11T03:31:58Z",
+  "mark_ii": {
+    "commit": "db4c686a3c5d16644b6a890855febf46cfdfc7be",
+    "short": "db4c686",
+    "policy_modules": [
+      "harness-limits.md",
+      "memory-promote.md",
+      "models-guidance.md",
+      "package-complete.md",
+      "routing.md",
+      "safety.md",
+      "verify-critic.md",
+      "wiki-paths.md"
+    ]
+  },
+  "hzr_skills": {
+    "commit": "f0d95a8ffd0650585fd3bf054ec5714e5ef327ab",
+    "short": "f0d95a8"
+  },
+  "overlay": "/home/steve/shared/projects/grok-webui/.harness/overlay.yaml",
+  "project_name": "grok-webui",
+  "targets": [
+    "grok",
+    "opencode",
+    "copilot"
+  ],
+  "adapters": [
+    "grok",
+    "opencode",
+    "copilot"
+  ],
+  "skills_installed": [
+    "leaf-wiki"
+  ],
+  "generator": "coding-agent-mark-ii/scripts/sync-harness.py",
+  "overlay_schema": "overlays/SCHEMA.md"
+}
