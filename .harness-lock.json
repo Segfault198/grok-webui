@@ -1,8 +1,8 @@
 {
-  "synced_at": "2026-10-11T03:31:58Z",
+  "synced_at": "2026-10-11T04:35:42Z",
   "mark_ii": {
-    "commit": "db4c686a3c5d16644b6a890855febf46cfdfc7be",
-    "short": "db4c686",
+    "commit": "54fff5f88a2fd538e55f612f6858c802bda2ed2f",
+    "short": "54fff5f",
     "policy_modules": [
       "harness-limits.md",
       "memory-promote.md",
@@ -18,7 +18,7 @@
     "commit": "f0d95a8ffd0650585fd3bf054ec5714e5ef327ab",
     "short": "f0d95a8"
   },
-  "overlay": "/home/steve/shared/projects/grok-webui/.harness/overlay.yaml",
+  "overlay": ".harness/overlay.yaml",
   "project_name": "grok-webui",
   "targets": [
     "grok",

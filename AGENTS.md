@@ -99,7 +99,7 @@ If neither appears and the diff clearly introduced durable cross-project pattern
 ## Hard rules (routing-related)
 
 1. Acceptance checks are data `verify` can fail — not vibes.
-2. **Parallelism default SERIAL.** `PARALLEL=yes` only with disjoint PATHS (or INTERFACE_FREEZE), max **2** workers, **`ISOLATION=worktree`**, and WIP leases under `.opencode/wip/` (see skill `worktree-parallel` if installed). Never two writers on the main worktree.
+2. **OpenCode / Plan B:** when `PARALLEL=yes`, use disjoint PATHS (or INTERFACE_FREEZE), max **2** workers, **`ISOLATION=worktree`**, and WIP leases under `.opencode/wip/` (see skill `worktree-parallel` if installed). Never two writers on the main OpenCode worktree. Other seats use their native concurrency (see seat emit / `harness-limits.md`) — this bullet is not a cross-mouth “default serial” ban.
 3. No "one file per Task" law. Prefer the smallest coherent package.
 4. Do not implement large L diffs in the router.
 5. No mandatory critic on pure copy/docs.
