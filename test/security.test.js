@@ -286,6 +286,36 @@ test('ask_user_question and exit_plan_mode are handled interactively', () => {
   assert.match(app, /exit_plan_mode/);
 });
 
+test('exit_plan_mode ExtResponse uses Grok 1.0.52 outcome tokens', () => {
+  const start = server.indexOf('function buildPlanApprovalResult');
+  const end = server.indexOf('\nfunction ', start + 1);
+  assert.ok(start >= 0 && end > start);
+  const body = server.slice(start, end);
+  assert.match(body, /outcome:\s*'approved'/);
+  assert.match(body, /outcome:\s*'cancelled'/);
+  assert.match(body, /outcome:\s*'abandoned'/);
+  assert.match(body, /fail open as cancelled/);
+  assert.doesNotMatch(body, /return \{ decision,\s*feedback \}/);
+
+  const fn = new Function(`${body}; return buildPlanApprovalResult;`)();
+  assert.deepEqual(fn({ decision: 'approve' }), { outcome: 'approved' });
+  assert.deepEqual(fn({ decision: 'approve', feedback: '  ' }), { outcome: 'approved' });
+  assert.deepEqual(fn({ decision: 'approve', feedback: 'ship it' }), {
+    outcome: 'approved',
+    feedback: 'ship it',
+  });
+  assert.deepEqual(fn({ decision: 'request_changes', feedback: 'add tests' }), {
+    outcome: 'cancelled',
+    feedback: 'add tests',
+  });
+  assert.deepEqual(fn({ decision: 'quit' }), { outcome: 'abandoned' });
+  assert.deepEqual(fn({ outcome: 'abandoned' }), { outcome: 'abandoned' });
+  assert.deepEqual(fn({}), { outcome: 'cancelled' });
+  assert.deepEqual(fn({ decision: 'nope' }), { outcome: 'cancelled' });
+
+  assert.match(app, /JSON\.stringify\(\{ decision, feedback \}\)/);
+});
+
 test('chat media resolves session-relative paths and serves GROK_HOME artifacts', () => {
   assert.match(app, /function resolveLocalPath/);
   assert.match(app, /state\.cwd/);
