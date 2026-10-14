@@ -538,14 +538,26 @@ function buildAskUserResult(body = {}, pendingParams = {}) {
   return { answers, partial_answers: partial };
 }
 
+/** Build ExtResponse for exit_plan_mode from the browser POST body. */
 function buildPlanApprovalResult(body = {}) {
-  const raw = String(body.decision || body.action || 'approve').toLowerCase().replace(/[\s-]+/g, '_');
-  let decision = 'approve';
-  if (raw === 'request_changes' || raw === 'requestchanges' || raw === 'changes') decision = 'request_changes';
-  else if (raw === 'quit' || raw === 'reject' || raw === 'abandon' || raw === 'deny') decision = 'quit';
-  else if (raw === 'approve' || raw === 'accept' || raw === 'yes') decision = 'approve';
-  const feedback = body.feedback != null ? String(body.feedback) : (body.message != null ? String(body.message) : '');
-  return { decision, feedback };
+  // Grok ExitPlanModeExtResponse: { outcome: "approved"|"cancelled"|"abandoned", feedback?: string }.
+  // Unrecognized outcome strings fail open as cancelled (revise) — "approve"/"quit" are not recognized.
+  const raw = String(body.outcome || body.decision || body.action || '')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+  const text = body.feedback != null ? String(body.feedback)
+    : (body.message != null ? String(body.message) : '');
+  const feedback = text.trim() ? text : undefined;
+
+  if (raw === 'approved' || raw === 'approve' || raw === 'accept' || raw === 'yes') {
+    return feedback ? { outcome: 'approved', feedback } : { outcome: 'approved' };
+  }
+  if (raw === 'abandoned' || raw === 'quit' || raw === 'reject' || raw === 'abandon' || raw === 'deny') {
+    return feedback ? { outcome: 'abandoned', feedback } : { outcome: 'abandoned' };
+  }
+  // request_changes / cancelled / unknown → cancelled (stay in plan mode and revise).
+  return feedback ? { outcome: 'cancelled', feedback } : { outcome: 'cancelled' };
 }
 
 function readSummary(sessionDir) {
