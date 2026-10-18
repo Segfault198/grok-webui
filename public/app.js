@@ -1661,6 +1661,7 @@ if ($('#composer-form')) {
   }
 
   function newSession() {
+    const previousId = state.sessionId;
     state.sessionId = null;
     localStorage.removeItem('grok-webui-active-session');
     state.streamingNode = null;
@@ -1687,6 +1688,14 @@ if ($('#composer-form')) {
     restoreDraft();
     $('#message').focus();
     $('#sidebar').classList.remove('open');
+    if (previousId) {
+      request(`/api/sessions/${encodeURIComponent(previousId)}/unload`, {
+        method: 'POST',
+        body: '{}',
+      }).catch((error) => {
+        console.warn('unload session', error.message);
+      });
+    }
   }
 
   async function ensureSession() {
@@ -2164,6 +2173,10 @@ if ($('#composer-form')) {
         finalizeStreamingMessage();
         resyncSession({ force: true });
         updateActivity('turn', { title: 'Turn interrupted', detail: 'Stopped by user', kind: 'reasoning', status: 'error' });
+      } else if (payload.type === 'session_unloaded') {
+        if (payload.sessionId) state.activeSessionIds.delete(payload.sessionId);
+        renderSessions();
+        updateRunStatus();
       } else if (payload.type === 'bridge_error') {
         toast(payload.message, 'error');
         setConnected(false, 'Agent offline');

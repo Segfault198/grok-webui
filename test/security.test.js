@@ -354,3 +354,96 @@ test('cancel is exposed for in-flight turns', () => {
   assert.match(app, /\/cancel/);
   assert.match(html, /id="interrupt"/);
 });
+
+function loadSessionCloseHelpers() {
+  const start = server.indexOf('function isSessionCloseUnsupportedError');
+  const end = server.indexOf('\nclass GrokBridge');
+  assert.ok(start >= 0 && end > start, 'session close helpers should sit above GrokBridge');
+  const body = server.slice(start, end);
+  return new Function(`${body}; return { isSessionCloseUnsupportedError, dropLoadedSessionMaps, closeOrDropSession };`)();
+}
+
+test('session/close helper closes ACP tokens, skips in-flight, and falls back when the method is missing', async () => {
+  assert.match(server, /session\/close/);
+  assert.match(server, /request\('session\/close', \{ sessionId: id \}/);
+  assert.match(server, /type: 'session_unloaded'/);
+  assert.match(server, /unloadLoadedSessions/);
+  assert.match(server, /reason: 'logout'/);
+  assert.match(server, /reason: 'shutdown'/);
+  assert.match(server, /unloadMatch/);
+  assert.match(server, /\/unload\$/);
+  assert.match(app, /\/unload/);
+  assert.match(app, /session_unloaded/);
+  assert.doesNotMatch(app, /session\/close/);
+  assert.doesNotMatch(server, /sessionMatch && req\.method === 'DELETE'/);
+
+  const {
+    isSessionCloseUnsupportedError,
+    dropLoadedSessionMaps,
+    closeOrDropSession,
+  } = loadSessionCloseHelpers();
+
+  assert.equal(isSessionCloseUnsupportedError({ rpc: { code: -32601, message: 'Method not found' } }), true);
+  assert.equal(isSessionCloseUnsupportedError(Object.assign(new Error('Unknown method: session/close'), { code: -32601 })), true);
+  assert.equal(isSessionCloseUnsupportedError(new Error('Grok request timed out: session/close')), false);
+
+  const maps = {
+    loadedSessions: new Set(['keep']),
+    availableCommands: new Map([['keep', []], ['gone', []]]),
+    modelsBySession: new Map([['gone', { id: 1 }]]),
+    permissionModes: new Map([['gone', 'moderate']]),
+  };
+  dropLoadedSessionMaps(maps, 'gone');
+  assert.equal(maps.availableCommands.has('gone'), false);
+  assert.equal(maps.loadedSessions.has('keep'), true);
+
+  const closed = [];
+  const target = {
+    activeSessions: new Map(),
+    loadedSessions: new Set(['abc']),
+    availableCommands: new Map([['abc', []]]),
+    modelsBySession: new Map([['abc', {}]]),
+    permissionModes: new Map([['abc', 'moderate']]),
+    sessionCloseUnsupported: false,
+  };
+
+  const ok = await closeOrDropSession(target, 'abc', {
+    requestClose: async (id) => { closed.push({ sessionId: id }); },
+  });
+  assert.equal(ok.skipped, false);
+  assert.equal(ok.closed, true);
+  assert.deepEqual(closed, [{ sessionId: 'abc' }]);
+  assert.equal(target.loadedSessions.has('abc'), false);
+  assert.equal(target.availableCommands.has('abc'), false);
+
+  target.activeSessions.set('busy', { sessionId: 'busy' });
+  target.loadedSessions.add('busy');
+  const skip = await closeOrDropSession(target, 'busy', {
+    requestClose: async () => { throw new Error('should not close in-flight'); },
+  });
+  assert.equal(skip.skipped, true);
+  assert.equal(skip.reason, 'in_flight');
+  assert.equal(target.loadedSessions.has('busy'), true);
+
+  target.loadedSessions.add('old');
+  const missing = await closeOrDropSession(target, 'old', {
+    requestClose: async () => {
+      throw Object.assign(new Error('Method not found'), {
+        rpc: { code: -32601, message: 'Method not found' },
+      });
+    },
+  });
+  assert.equal(missing.closed, false);
+  assert.equal(missing.unsupported, true);
+  assert.equal(target.sessionCloseUnsupported, true);
+  assert.equal(target.loadedSessions.has('old'), false);
+
+  let laterCalls = 0;
+  target.loadedSessions.add('later');
+  const remembered = await closeOrDropSession(target, 'later', {
+    requestClose: async () => { laterCalls += 1; },
+  });
+  assert.equal(laterCalls, 0);
+  assert.equal(remembered.closed, false);
+  assert.equal(target.loadedSessions.has('later'), false);
+});

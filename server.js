@@ -858,6 +858,48 @@ function isSystemReminderText(text) {
   return false;
 }
 
+function isSessionCloseUnsupportedError(error) {
+  const code = error?.rpc?.code ?? error?.code;
+  if (code === -32601) return true;
+  const message = String(error?.rpc?.message || error?.message || '');
+  return /method not found|unknown method|not (?:implemented|supported)|unsupported method/i.test(message);
+}
+
+function dropLoadedSessionMaps(target, sessionId) {
+  target.loadedSessions?.delete(sessionId);
+  target.availableCommands?.delete(sessionId);
+  target.modelsBySession?.delete(sessionId);
+  target.permissionModes?.delete(sessionId);
+  target.lastActivityAt?.delete(sessionId);
+}
+
+async function closeOrDropSession(target, sessionId, { requestClose } = {}) {
+  if (!sessionId) return { skipped: true, reason: 'missing_id' };
+  if (target.activeSessions?.has(sessionId)) return { skipped: true, reason: 'in_flight' };
+  if (!target.loadedSessions?.has(sessionId)) {
+    dropLoadedSessionMaps(target, sessionId);
+    return { skipped: true, reason: 'not_loaded' };
+  }
+
+  let closed = false;
+  if (typeof requestClose === 'function' && !target.sessionCloseUnsupported) {
+    try {
+      await requestClose(sessionId);
+      closed = true;
+    } catch (error) {
+      if (isSessionCloseUnsupportedError(error)) {
+        target.sessionCloseUnsupported = true;
+      }
+    }
+  }
+  dropLoadedSessionMaps(target, sessionId);
+  return {
+    skipped: false,
+    closed,
+    unsupported: Boolean(target.sessionCloseUnsupported),
+  };
+}
+
 class GrokBridge {
   constructor() {
     this.nextId = 1;
@@ -868,6 +910,7 @@ class GrokBridge {
     this.availableCommands = new Map(); // sessionId -> commands
     this.modelsBySession = new Map();
     this.permissionModes = new Map();
+    this.sessionCloseUnsupported = false;
     this.ready = this.start();
   }
 
@@ -894,6 +937,11 @@ class GrokBridge {
         for (const { reject: fail } of this.pending.values()) fail(error);
         this.pending.clear();
         this.activeSessions.clear();
+        this.loadedSessions.clear();
+        this.availableCommands.clear();
+        this.modelsBySession.clear();
+        this.permissionModes.clear();
+        this.sessionCloseUnsupported = false;
         broadcast({ type: 'bridge_error', message: error.message });
         // Auto-restart after brief pause
         setTimeout(() => {
@@ -1142,6 +1190,7 @@ class GrokBridge {
         console.warn('set_model after create failed:', error.message);
       }
     }
+    await this.unloadLoadedSessions({ exceptId: sessionId, reason: 'switch' });
     return result;
   }
 
@@ -1157,12 +1206,41 @@ class GrokBridge {
     }, 60000);
     this.loadedSessions.add(sessionId);
     if (result?.models) this.modelsBySession.set(sessionId, result.models);
+    await this.unloadLoadedSessions({ exceptId: sessionId, reason: 'switch' });
     return result;
   }
 
   async ensureLoaded(sessionId, cwd) {
     if (this.loadedSessions.has(sessionId)) return;
     await this.loadSession(sessionId, cwd);
+  }
+
+  async unloadSession(sessionId, { reason = 'switch' } = {}) {
+    const result = await closeOrDropSession(this, sessionId, {
+      requestClose: async (id) => {
+        if (!this.proc || this.proc.killed || !this.proc.stdin?.writable) {
+          throw Object.assign(new Error('Grok agent is unavailable'), { code: 'UNAVAILABLE' });
+        }
+        return this.request('session/close', { sessionId: id }, 10_000);
+      },
+    });
+    if (result.skipped) return result;
+    broadcast({
+      type: 'session_unloaded',
+      sessionId,
+      reason: result.closed ? reason : (result.unsupported ? 'unsupported' : reason),
+      activeSessions: [...this.activeSessions.values()],
+    });
+    return result;
+  }
+
+  async unloadLoadedSessions({ exceptId = null, reason = 'switch' } = {}) {
+    const ids = [...this.loadedSessions].filter((id) => id !== exceptId);
+    const results = [];
+    for (const id of ids) {
+      results.push(await this.unloadSession(id, { reason }));
+    }
+    return results;
   }
 
   async prompt(sessionId, promptBlocks, { cwd = null } = {}) {
@@ -1365,6 +1443,7 @@ async function api(req, res, pathname) {
   if (!authenticated(req)) return json(res, 401, { error: 'Authentication required' });
 
   if (pathname === '/api/logout' && req.method === 'POST') {
+    await bridge.unloadLoadedSessions({ reason: 'logout' });
     const token = parseCookies(req).grok_webui_session;
     if (token) sessions.delete(sessionKey(token));
     saveSessions();
@@ -1529,6 +1608,13 @@ async function api(req, res, pathname) {
       messageEnd: history.messageEnd,
       lite: Boolean(lite),
     });
+  }
+
+  const unloadMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/unload$/);
+  if (unloadMatch && req.method === 'POST') {
+    const sessionId = safeSessionId(decodeURIComponent(unloadMatch[1]));
+    const result = await bridge.unloadSession(sessionId, { reason: 'switch' });
+    return json(res, 200, { ok: true, ...result });
   }
 
   const loadMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/load$/);
@@ -1820,10 +1906,18 @@ server.listen(PORT, HOST, () => {
   }
 });
 
-function shutdown() {
+async function shutdown() {
+  try {
+    await Promise.race([
+      bridge.unloadLoadedSessions({ reason: 'shutdown' }),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
+  } catch (error) {
+    console.warn('session close during shutdown:', error.message);
+  }
   server.close();
   if (bridge.proc && !bridge.proc.killed) bridge.proc.kill('SIGTERM');
   setTimeout(() => process.exit(0), 1000).unref();
 }
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+process.on('SIGINT', () => { shutdown().catch(() => process.exit(1)); });
+process.on('SIGTERM', () => { shutdown().catch(() => process.exit(1)); });
