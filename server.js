@@ -900,6 +900,32 @@ async function closeOrDropSession(target, sessionId, { requestClose } = {}) {
   };
 }
 
+function parseSessionIdleMs(raw, {
+  defaultMs = 20 * 60 * 1000,
+  minMs = 5 * 60 * 1000,
+  maxMs = 60 * 60 * 1000,
+} = {}) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return defaultMs;
+  return Math.min(maxMs, Math.max(minMs, n));
+}
+
+function idleUnloadCandidates(target, { idleMs, now = Date.now() } = {}) {
+  const ids = [];
+  const loaded = target.loadedSessions || new Set();
+  const active = target.activeSessions || new Map();
+  const lastActivityAt = target.lastActivityAt || new Map();
+  for (const id of loaded) {
+    if (active.has(id)) continue;
+    const at = lastActivityAt.get(id) || 0;
+    if (now - at >= idleMs) ids.push(id);
+  }
+  return ids;
+}
+
+const SESSION_IDLE_MS = parseSessionIdleMs(process.env.SESSION_IDLE_MS);
+const SESSION_IDLE_CHECK_MS = Math.min(60_000, Math.max(15_000, Math.floor(SESSION_IDLE_MS / 4)));
+
 class GrokBridge {
   constructor() {
     this.nextId = 1;
@@ -910,6 +936,7 @@ class GrokBridge {
     this.availableCommands = new Map(); // sessionId -> commands
     this.modelsBySession = new Map();
     this.permissionModes = new Map();
+    this.lastActivityAt = new Map();
     this.sessionCloseUnsupported = false;
     this.ready = this.start();
   }
@@ -941,6 +968,7 @@ class GrokBridge {
         this.availableCommands.clear();
         this.modelsBySession.clear();
         this.permissionModes.clear();
+        this.lastActivityAt.clear();
         this.sessionCloseUnsupported = false;
         broadcast({ type: 'bridge_error', message: error.message });
         // Auto-restart after brief pause
@@ -1182,6 +1210,7 @@ class GrokBridge {
     });
     const sessionId = result.sessionId;
     this.loadedSessions.add(sessionId);
+    this.touchActivity(sessionId);
     if (result.models) this.modelsBySession.set(sessionId, result.models);
     if (modelId) {
       try {
@@ -1205,6 +1234,7 @@ class GrokBridge {
       mcpServers: [],
     }, 60000);
     this.loadedSessions.add(sessionId);
+    this.touchActivity(sessionId);
     if (result?.models) this.modelsBySession.set(sessionId, result.models);
     await this.unloadLoadedSessions({ exceptId: sessionId, reason: 'switch' });
     return result;
@@ -1243,8 +1273,22 @@ class GrokBridge {
     return results;
   }
 
+  touchActivity(sessionId, at = Date.now()) {
+    if (sessionId) this.lastActivityAt.set(sessionId, at);
+  }
+
+  async unloadIdleSessions(now = Date.now()) {
+    const ids = idleUnloadCandidates(this, { idleMs: SESSION_IDLE_MS, now });
+    const results = [];
+    for (const id of ids) {
+      results.push(await this.unloadSession(id, { reason: 'idle' }));
+    }
+    return results;
+  }
+
   async prompt(sessionId, promptBlocks, { cwd = null } = {}) {
     if (cwd) await this.ensureLoaded(sessionId, cwd);
+    this.touchActivity(sessionId);
     this.activeSessions.set(sessionId, {
       sessionId,
       promptId: null,
@@ -1258,6 +1302,7 @@ class GrokBridge {
       return result;
     } finally {
       this.activeSessions.delete(sessionId);
+      if (this.loadedSessions.has(sessionId)) this.touchActivity(sessionId);
     }
   }
 
@@ -1272,6 +1317,17 @@ class GrokBridge {
 }
 
 const bridge = new GrokBridge();
+
+function startSessionIdleWatcher() {
+  const timer = setInterval(() => {
+    bridge.unloadIdleSessions().catch((error) => {
+      console.warn('idle session unload failed:', error.message);
+    });
+  }, SESSION_IDLE_CHECK_MS);
+  if (typeof timer.unref === 'function') timer.unref();
+}
+
+startSessionIdleWatcher();
 
 function serveStatic(req, res, pathname) {
   const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
@@ -1666,6 +1722,7 @@ async function api(req, res, pathname) {
     const cwd = allowedWorkspace(body.cwd || summary?.cwd || WORKSPACE_ROOT);
 
     await bridge.ensureLoaded(sessionId, cwd);
+    bridge.touchActivity(sessionId);
     if (body.modelId) {
       try { await bridge.setModel(sessionId, body.modelId); }
       catch (error) { console.warn('model switch failed:', error.message); }

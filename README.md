@@ -115,6 +115,7 @@ npm test
 | `WORKSPACE_ROOT` | `$HOME` at setup | Allowed project root |
 | `GROK_HOME` | `~/.grok` | Grok config / sessions |
 | `SESSION_HOURS` | `24` | Cookie lifetime |
+| `SESSION_IDLE_MS` | `1200000` (20 min) | Unload idle loaded ACP sessions (clamped 5–60 min) |
 | `WEBUI_USERNAME` | optional until setup | Login username |
 | `PASSWORD_SALT` / `PASSWORD_HASH` | set at setup | UI password hash |
 | `GROK_BIN` | `grok` | Path to Grok CLI |

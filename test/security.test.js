@@ -447,3 +447,46 @@ test('session/close helper closes ACP tokens, skips in-flight, and falls back wh
   assert.equal(remembered.closed, false);
   assert.equal(target.loadedSessions.has('later'), false);
 });
+
+test('idle unload times out loaded sessions, skips in-flight prompts, and honors SESSION_IDLE_MS', () => {
+  assert.match(server, /SESSION_IDLE_MS/);
+  assert.match(server, /lastActivityAt/);
+  assert.match(server, /unloadIdleSessions/);
+  assert.match(server, /reason: 'idle'/);
+  assert.match(server, /touchActivity/);
+  assert.match(server, /startSessionIdleWatcher/);
+
+  const eventsStart = server.indexOf("pathname === '/api/events'");
+  const eventsEnd = server.indexOf("pathname === '/api/image'");
+  assert.ok(eventsStart >= 0 && eventsEnd > eventsStart);
+  const events = server.slice(eventsStart, eventsEnd);
+  assert.match(events, /: ping /);
+  assert.doesNotMatch(events, /touchActivity|lastActivityAt/);
+
+  const start = server.indexOf('function parseSessionIdleMs');
+  const end = server.indexOf('\nclass GrokBridge');
+  assert.ok(start >= 0 && end > start);
+  const body = server.slice(start, end);
+  const { parseSessionIdleMs, idleUnloadCandidates } = new Function(
+    `${body}; return { parseSessionIdleMs, idleUnloadCandidates };`,
+  )();
+
+  assert.equal(parseSessionIdleMs(undefined), 20 * 60 * 1000);
+  assert.equal(parseSessionIdleMs('not-a-number'), 20 * 60 * 1000);
+  assert.equal(parseSessionIdleMs('600000'), 600000);
+  assert.equal(parseSessionIdleMs('60000'), 5 * 60 * 1000);
+  assert.equal(parseSessionIdleMs('7200000'), 60 * 60 * 1000);
+
+  const now = 1_000_000;
+  const idleMs = 20 * 60 * 1000;
+  const target = {
+    loadedSessions: new Set(['idle', 'fresh', 'busy']),
+    activeSessions: new Map([['busy', { sessionId: 'busy' }]]),
+    lastActivityAt: new Map([
+      ['idle', now - idleMs - 1],
+      ['fresh', now - 1000],
+      ['busy', now - idleMs - 1],
+    ]),
+  };
+  assert.deepEqual(idleUnloadCandidates(target, { idleMs, now }), ['idle']);
+});
