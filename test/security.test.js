@@ -490,3 +490,117 @@ test('idle unload times out loaded sessions, skips in-flight prompts, and honors
   };
   assert.deepEqual(idleUnloadCandidates(target, { idleMs, now }), ['idle']);
 });
+
+test('ACP fs.readTextFile is withheld only for a verified grok >= 1.0.4', () => {
+  const floorAt = server.indexOf('const GROK_IMAGE_READ_MIN_VERSION');
+  const classAt = server.indexOf('\nclass GrokBridge');
+  assert.ok(floorAt >= 0 && classAt > floorAt);
+  const src = server.slice(floorAt, classAt);
+  assert.match(src, /GROK_IMAGE_READ_MIN_VERSION = \[1, 0, 4\]/);
+  assert.match(src, /function acpFsCapabilities/);
+  const acpFsCapabilities = new Function(`${src}; return acpFsCapabilities;`)();
+
+  const withheld = (fsCaps) => {
+    assert.deepEqual(fsCaps, { writeTextFile: true });
+    assert.equal(Object.hasOwn(fsCaps, 'readTextFile'), false);
+  };
+  const delegated = (fsCaps) => {
+    assert.deepEqual(fsCaps, { readTextFile: true, writeTextFile: true });
+  };
+
+  for (const version of ['1.0.4', '1.0.5', '1.0.34', '1.0.62', '1.0.40', '2.0.0']) {
+    withheld(acpFsCapabilities(version, { verified: true, override: '' }));
+  }
+  withheld(acpFsCapabilities('grok 1.0.34 (3736acbc8658) [stable]', { verified: true, override: '' }));
+  // First dotted triple wins. A hash or a later triple must not become the version.
+  delegated(acpFsCapabilities('grok 1.0.3 (1.0.62) [stable]', { verified: true, override: '' }));
+
+  for (const version of ['1.0.3', '1.0.0', '0.2.117']) {
+    delegated(acpFsCapabilities(version, { verified: true, override: '' }));
+  }
+  delegated(acpFsCapabilities('grok 1.0.62 (deadbeef) [stable]', { verified: false, override: '' }));
+  delegated(acpFsCapabilities('grok 1.0.62 (deadbeef) [stable]', { override: '' }));
+  for (const version of ['', 'grok', 'not-a-version']) {
+    delegated(acpFsCapabilities(version, { verified: true, override: '' }));
+    delegated(acpFsCapabilities(version, { verified: false, override: '' }));
+  }
+
+  delegated(acpFsCapabilities('1.0.62', { verified: true, override: 'delegate' }));
+  delegated(acpFsCapabilities('1.0.62', { verified: true, override: '  Delegate  ' }));
+  withheld(acpFsCapabilities('0.2.117', { verified: true, override: 'withhold' }));
+  withheld(acpFsCapabilities('nope', { verified: false, override: 'WITHHOLD' }));
+
+  // Unknown and empty are auto: gate on the verified triple, do not force a mode.
+  withheld(acpFsCapabilities('1.0.62', { verified: true, override: 'yes' }));
+  delegated(acpFsCapabilities('1.0.3', { verified: true, override: 'yes' }));
+  withheld(acpFsCapabilities('1.0.4', { verified: true, override: '' }));
+  delegated(acpFsCapabilities('0.2.117', { verified: true, override: '' }));
+  delegated(acpFsCapabilities('1.0.62', { verified: false, override: 'yes' }));
+
+  const previous = process.env.GROK_ACP_READ_TEXT_FILE;
+  try {
+    process.env.GROK_ACP_READ_TEXT_FILE = 'delegate';
+    delegated(acpFsCapabilities('1.0.62', { verified: true }));
+    process.env.GROK_ACP_READ_TEXT_FILE = 'withhold';
+    withheld(acpFsCapabilities('0.2.117', { verified: true }));
+    // Explicit override wins over the env brake.
+    delegated(acpFsCapabilities('1.0.62', { verified: true, override: 'delegate' }));
+    process.env.GROK_ACP_READ_TEXT_FILE = 'yes';
+    withheld(acpFsCapabilities('1.0.62', { verified: true }));
+    delegated(acpFsCapabilities('1.0.3', { verified: true }));
+    delete process.env.GROK_ACP_READ_TEXT_FILE;
+    withheld(acpFsCapabilities('grok 1.0.34 (3736acbc8658) [stable]', { verified: true }));
+    delegated(acpFsCapabilities('1.0.3', { verified: true }));
+  } finally {
+    if (previous === undefined) delete process.env.GROK_ACP_READ_TEXT_FILE;
+    else process.env.GROK_ACP_READ_TEXT_FILE = previous;
+  }
+});
+
+test('initialize fs capabilities come from the helper, handlers stay delegated-only', () => {
+  const startAt = server.indexOf('  start() {');
+  const sendAt = server.indexOf('  send(message)', startAt);
+  assert.ok(startAt >= 0 && sendAt > startAt);
+  const startBody = server.slice(startAt, sendAt);
+  assert.match(startBody, /const grokBin = process\.env\.GROK_BIN \|\| 'grok'/);
+  assert.match(startBody, /probeGrokVersion\(grokBin\)/);
+  assert.match(startBody, /const fsCapabilities = acpFsCapabilities\(/);
+  assert.match(startBody, /fs: fsCapabilities/);
+  assert.match(startBody, /spawn\(grokBin, \['agent', '--no-leader', 'stdio'\]/);
+  assert.match(startBody, /\[acp\] binary=\$\{grokBin\} version=/);
+  assert.match(startBody, /verified=\$\{probed\.verified\} readTextFile=/);
+  const probeAt = startBody.indexOf('probeGrokVersion(grokBin)');
+  const spawnAt = startBody.indexOf("spawn(grokBin, ['agent', '--no-leader', 'stdio']");
+  const initAt = startBody.indexOf("rawRequest('initialize'");
+  assert.ok(probeAt >= 0 && probeAt < spawnAt && spawnAt < initAt);
+
+  assert.match(server, /spawnSync\(grokBin, \['--version'\]/);
+  assert.match(server, /timeout:\s*5000/);
+  // Exit restart calls start() again, so the probe runs on the new binary.
+  assert.match(server, /this\.ready = this\.start\(\)/);
+
+  assert.equal((server.match(/readTextFile:\s*true/g) || []).length, 1);
+  assert.doesNotMatch(server, /readTextFile:\s*false/);
+  assert.doesNotMatch(server, /fs:\s*\{\s*readTextFile/);
+  assert.doesNotMatch(server, /terminal:\s*true/);
+
+  const readAt = server.indexOf("if (method === 'fs/read_text_file')");
+  const writeAt = server.indexOf("if (method === 'fs/write_text_file')");
+  const afterWrite = server.indexOf("if (method === '_x.ai/ask_user_question'", writeAt);
+  assert.ok(readAt >= 0 && writeAt > readAt && afterWrite > writeAt);
+  const readBody = server.slice(readAt, writeAt);
+  assert.match(readBody, /readFileSync\(resolved, 'utf8'\)/);
+  assert.match(readBody, /2 \* 1024 \* 1024/);
+  assert.match(readBody, /File too large for text read/);
+  assert.match(readBody, /Read path not allowed/);
+  assert.match(server.slice(writeAt, afterWrite), /allowedFilePath\(filePath, \{ forWrite: true \}\)/);
+
+  const blocksAt = server.indexOf('function buildPromptBlocks');
+  const blocksEnd = server.indexOf('\nasync function api', blocksAt);
+  assert.ok(blocksAt >= 0 && blocksEnd > blocksAt);
+  const blocks = server.slice(blocksAt, blocksEnd);
+  assert.match(blocks, /Use tools to inspect this path if needed\./);
+  assert.doesNotMatch(blocks, /type:\s*'image'/);
+  assert.match(server, /HISTORY_IMAGE_DATA_CHARS = 180_000/);
+  assert.match(server, /askUserQuestion:\s*true/);
+});

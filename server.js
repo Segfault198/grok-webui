@@ -7,7 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const os = require('node:os');
 const readline = require('node:readline');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 
 const PROJECT_ROOT = __dirname;
 const PUBLIC_ROOT = path.join(PROJECT_ROOT, 'public');
@@ -925,7 +925,61 @@ function idleUnloadCandidates(target, { idleMs, now = Date.now() } = {}) {
 
 const SESSION_IDLE_MS = parseSessionIdleMs(process.env.SESSION_IDLE_MS);
 const SESSION_IDLE_CHECK_MS = Math.min(60_000, Math.max(15_000, Math.floor(SESSION_IDLE_MS / 4)));
+// Image-aware read_file lives on the CLI from grok 1.0.4, but only when
+// initialize does not advertise fs.readTextFile. Omit the key (do not send
+// false). Older, unparsed, or unverified CLIs keep delegated UTF-8 reads.
+// GROK_ACP_READ_TEXT_FILE=delegate|withhold overrides; anything else is auto.
+const GROK_IMAGE_READ_MIN_VERSION = [1, 0, 4];
 
+function parseGrokVersionTriple(text) {
+  const match = String(text ?? '').match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function grokVersionAtLeast(triple, floor) {
+  for (let i = 0; i < 3; i++) {
+    if (triple[i] > floor[i]) return true;
+    if (triple[i] < floor[i]) return false;
+  }
+  return true;
+}
+
+function acpFsCapabilities(versionText, { verified = false, override = process.env.GROK_ACP_READ_TEXT_FILE } = {}) {
+  const mode = String(override ?? '').trim().toLowerCase();
+  let withhold = false;
+  if (mode === 'withhold') {
+    withhold = true;
+  } else if (mode !== 'delegate' && verified) {
+    const triple = parseGrokVersionTriple(versionText);
+    withhold = Boolean(triple && grokVersionAtLeast(triple, GROK_IMAGE_READ_MIN_VERSION));
+  }
+  // Omit the key. Advertising a false read flag is a different object than
+  // the one measured to restore CLI image reads.
+  if (withhold) return { writeTextFile: true };
+  return { readTextFile: true, writeTextFile: true };
+}
+
+function probeGrokVersion(grokBin) {
+  let text = '';
+  let exitOk = false;
+  try {
+    const result = spawnSync(grokBin, ['--version'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      input: '',
+    });
+    text = `${result?.stdout || ''}${result?.stderr || ''}`;
+    exitOk = Boolean(result) && !result.error && result.status === 0;
+  } catch {
+    text = '';
+    exitOk = false;
+  }
+  const triple = parseGrokVersionTriple(text);
+  // Non-zero, timeout, missing binary, or no dotted triple stays unverified
+  // even if the banner text looks like a new enough grok.
+  return { text, triple, verified: exitOk && Boolean(triple) };
+}
 class GrokBridge {
   constructor() {
     this.nextId = 1;
@@ -944,6 +998,13 @@ class GrokBridge {
   start() {
     return new Promise((resolve, reject) => {
       const grokBin = process.env.GROK_BIN || 'grok';
+      // Re-probed on every start, including the exit-handler restart below.
+      const probed = probeGrokVersion(grokBin);
+      const fsCapabilities = acpFsCapabilities(probed.text, { verified: probed.verified });
+      const readTextFileSent = fsCapabilities.readTextFile === true;
+      console.log(
+        `[acp] binary=${grokBin} version=${probed.triple ? probed.triple.join('.') : 'unparsed'} verified=${probed.verified} readTextFile=${readTextFileSent ? 'sent' : 'omitted'}`,
+      );
       this.proc = spawn(grokBin, ['agent', '--no-leader', 'stdio'], {
         cwd: WORKSPACE_ROOT,
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -985,7 +1046,7 @@ class GrokBridge {
         protocolVersion: 1,
         clientInfo: { name: 'grok_webui', title: 'Grok WebUI', version: '0.1.0' },
         clientCapabilities: {
-          fs: { readTextFile: true, writeTextFile: true },
+          fs: fsCapabilities,
           // Agent runs tools itself; client terminal protocol is not implemented.
         },
         // Advertise interactive ask-user support (agent expects a bool).
