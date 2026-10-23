@@ -5,6 +5,14 @@ Coding seats must end M/L packages (and contract-changing S) with:
 - `BELIEF: .wiki/beliefs/<id>.md` (file exists; outcomes complete)
 - Exactly one of: `PROMOTE queued: …` | `PROMOTE skipped: leaf-only — …`
 
+## Plain-text signal lines
+
+Emit each signal as its own plain text line.
+
+- Forbidden: markdown bold/italics around keywords (e.g. `**PROMOTE skipped:**`); do not wrap the whole signal in backticks.
+- Watchers do **not** strip markdown decoration.
+- Checker SoT remains Mark II (`package-complete.md`, `docs/HOOKS.md`, `require_*.sh`) — this skill is a pointer only.
+
 ## Machine checkers (SoT)
 
 **Source of truth:** [coding-agent-mark-ii](https://github.com/Segfault198/coding-agent-mark-ii)  

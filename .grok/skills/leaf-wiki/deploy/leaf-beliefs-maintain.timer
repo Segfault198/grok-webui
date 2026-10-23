@@ -1,8 +1,8 @@
 [Unit]
-Description=Daily leaf belief maintenance (deterministic)
+Description=Daily leaf belief maintenance + calibration (deterministic)
 
 [Timer]
-OnCalendar=*-*-* 07:15:00
+OnCalendar=*-*-* 07:15:00 UTC
 Persistent=true
 
 [Install]

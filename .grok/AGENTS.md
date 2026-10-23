@@ -37,10 +37,27 @@ If unclear: ask once, default **M**. Prefer the smallest coherent package.
 For **M/L** (and **S** that changes architecture/auth/security contracts):
 
 1. Append `.wiki/log.md`
-2. Complete belief outcomes → `BELIEF: .wiki/beliefs/<id>.md`
-3. Exactly one of `PROMOTE queued: <yaml>` or `PROMOTE skipped: leaf-only — <reason>`
+2. Write `.wiki/beliefs/<id>.md`, then print exactly:
+   `BELIEF: .wiki/beliefs/<id>.md`
+3. Print exactly one:
+   `PROMOTE queued: <yaml>` or `PROMOTE skipped: leaf-only — <reason>`
+
+These are machine footer lines: own line, exact `BELIEF:` / `PROMOTE` spelling, no markdown, no title-case `Belief:`, no backticks, no trailing period. Watchers do not fix decoration. Self-check OUT for `^BELIEF: ` and one `PROMOTE` line before claiming done.
+
+```text
+BELIEF: .wiki/beliefs/<session-id>.md
+PROMOTE queued: .wiki/_meta/promotion-queue/<file>.yaml
+```
+
+or:
+
+```text
+BELIEF: .wiki/beliefs/<session-id>.md
+PROMOTE skipped: leaf-only — <one-line reason>
+```
 
 A log append alone is not done. Belief files stay leaf-only (never promote YAML).
+At complete: every assumption needs outcome_note; use untested/broken when earned (DONE ignores outcome:). Read `.wiki/_meta/calibration.md` warnings on SessionInit.
 Wiki root is `.wiki/`. Use skill `leaf-wiki`.
 
 ## Verify / critic

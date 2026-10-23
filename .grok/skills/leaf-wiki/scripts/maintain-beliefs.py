@@ -16,45 +16,13 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-VAGUE = re.compile(
-    r"\b(if tests? pass|if it works|hopefully|should be fine|when ready|etc\.?)\b",
-    re.I,
-)
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+
+from belief_parse import VAGUE, parse_frontmatter, scan_shared  # noqa: E402
+
 ACTIVE_MAX_DAYS = 14
-
-
-def parse_frontmatter(text: str) -> dict:
-    if not text.startswith("---\n"):
-        return {}
-    end = text.find("\n---\n", 4)
-    if end < 0:
-        return {}
-    meta: dict = {}
-    current_assump = None
-    assumptions: list[dict] = []
-    for raw in text[4:end].splitlines():
-        if raw.startswith("  - id:") or raw.startswith("  -id:"):
-            if current_assump:
-                assumptions.append(current_assump)
-            current_assump = {"id": raw.split(":", 1)[1].strip().strip('"').strip("'")}
-            continue
-        if current_assump is not None and raw.startswith("    "):
-            line = raw.strip()
-            if ":" in line:
-                k, v = line.split(":", 1)
-                current_assump[k.strip()] = v.strip().strip('"').strip("'")
-            continue
-        if current_assump is not None and not raw.startswith(" "):
-            assumptions.append(current_assump)
-            current_assump = None
-        if ":" in raw and not raw.startswith(" "):
-            k, v = raw.split(":", 1)
-            meta[k.strip()] = v.strip().strip('"').strip("'")
-    if current_assump:
-        assumptions.append(current_assump)
-    if assumptions:
-        meta["assumptions"] = assumptions
-    return meta
 
 
 def dump_status(text: str, new_status: str) -> str:
@@ -84,9 +52,13 @@ def maintain_project(root: Path, today: date) -> list[str]:
         for a in assumptions if isinstance(assumptions, list) else []:
             fals = str(a.get("falsifiable", ""))
             if not fals.strip():
-                notes.append(f"WARN {root.name}: {path.name} assumption {a.get('id')} missing falsifiable")
+                notes.append(
+                    f"WARN {root.name}: {path.name} assumption {a.get('id')} missing falsifiable"
+                )
             elif VAGUE.search(fals):
-                notes.append(f"WARN {root.name}: {path.name} assumption {a.get('id')} vague falsifiable")
+                notes.append(
+                    f"WARN {root.name}: {path.name} assumption {a.get('id')} vague falsifiable"
+                )
             exp = str(a.get("expires", "")).strip()
             if exp:
                 try:
@@ -95,7 +67,9 @@ def maintain_project(root: Path, today: date) -> list[str]:
                         text = dump_status(text, "stale")
                         status = "stale"
                         changed = True
-                        notes.append(f"STALE {root.name}: {path.name} expired assumption {a.get('id')} on {exp}")
+                        notes.append(
+                            f"STALE {root.name}: {path.name} expired assumption {a.get('id')} on {exp}"
+                        )
                 except ValueError:
                     notes.append(f"WARN {root.name}: {path.name} bad expires={exp}")
 
@@ -120,13 +94,6 @@ def maintain_project(root: Path, today: date) -> list[str]:
                 with log_path.open("a", encoding="utf-8") as fh:
                     fh.write(line)
     return notes
-
-
-def scan_shared(home: Path) -> list[Path]:
-    base = home / "shared" / "projects"
-    if not base.is_dir():
-        return []
-    return sorted(p for p in base.iterdir() if (p / ".wiki" / "beliefs").is_dir())
 
 
 def main() -> int:
