@@ -34,7 +34,7 @@ Do not read reference files until the task demands it. Stop after the relevant f
 `log.md` ≠ promotion. After meaningful work:
 
 1. **Always:** short append to `log.md`; bump `last_verified` on any article you touched.
-2. **M/L:** complete the session belief file (outcomes `confirmed`/`broken`/`untested`); emit `BELIEF: .wiki/beliefs/<session-id>.md`. See `references/beliefs.md`.
+2. **M/L:** complete the session belief file (outcomes `confirmed`/`broken`/`untested` + `outcome_note` each; prefer untested/broken over fake confirmed); emit `BELIEF: .wiki/beliefs/<session-id>.md`. See `references/beliefs.md`. SessionInit: read `_meta/calibration.md` warnings if present.
 3. **If durable + cross-project:** update or create `articles/<slug>.md`, then queue YAML per `references/promotion-signal.md`. Prefer promote when a related belief was **confirmed** under a falsifiable condition that held.
 4. **If leaf-only:** do not invent a promote; say so explicitly (`leaf-only: <reason>`).
 

@@ -16,7 +16,7 @@ The leaf wiki lives at `.wiki/` in the project root.
 └── _meta/
     ├── promotion-queue/    # Pending manifests for Tench (YAML only)
     ├── processed/          # Drained / acknowledged manifests (audit)
-    └── calibration.md      # Optional P2 hit-rate stub (deterministic)
+    └── calibration.md      # P2 hit-rate stub (deterministic; calibrate-beliefs.py)
 ```
 
 ## Conventions
@@ -26,6 +26,7 @@ The leaf wiki lives at `.wiki/` in the project root.
 - `index.md` is derived — regenerate when articles change; do not treat it as source of truth.
 - `log.md` is append-only. Never edit old entries.
 - `beliefs/` is leaf-only session scratch; never queue belief files for hub promote. See `beliefs.md`.
+- `_meta/calibration.md` is written by `calibrate-beliefs.py` (counts + gates). SessionInit reads warnings from it. Do not hand-edit as SoT — regenerate via calibrate.
 - No hub paths, no cross-project peeks. Promotion is a local manifest drop only.
 
 ## Processed queue

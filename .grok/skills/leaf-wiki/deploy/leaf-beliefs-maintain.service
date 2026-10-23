@@ -1,5 +1,5 @@
 [Unit]
-Description=Maintain leaf wiki belief files across shared/projects
+Description=Maintain + calibrate leaf wiki belief files across shared/projects
 After=network-online.target
 
 [Service]
@@ -8,5 +8,6 @@ User=steve
 Group=steve
 WorkingDirectory=/home/steve
 Environment=HOME=/home/steve
-ExecStart=/usr/bin/python3 /home/steve/.local/share/hzr-skills/leaf-wiki/scripts/maintain-beliefs.py --scan-oc-shared --home /home/steve
+Environment=BELIEFS_INSTALL_ROOT=/home/steve/.local/share/hzr-skills/leaf-wiki
+ExecStart=/home/steve/.local/share/hzr-skills/leaf-wiki/scripts/beliefs-daily.sh
 Nice=10

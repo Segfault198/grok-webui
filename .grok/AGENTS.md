@@ -57,6 +57,7 @@ PROMOTE skipped: leaf-only — <one-line reason>
 ```
 
 A log append alone is not done. Belief files stay leaf-only (never promote YAML).
+At complete: every assumption needs outcome_note; use untested/broken when earned (DONE ignores outcome:). Read `.wiki/_meta/calibration.md` warnings on SessionInit.
 Wiki root is `.wiki/`. Use skill `leaf-wiki`.
 
 ## Verify / critic
