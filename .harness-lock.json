@@ -1,8 +1,8 @@
 {
-  "synced_at": "2026-10-11T04:38:19Z",
+  "synced_at": "2026-10-23T04:54:16Z",
   "mark_ii": {
-    "commit": "54fff5f88a2fd538e55f612f6858c802bda2ed2f",
-    "short": "54fff5f",
+    "commit": "b80f4c2575d07eab40c5c7d0ac93ba22b48f5370",
+    "short": "b80f4c2",
     "policy_modules": [
       "harness-limits.md",
       "memory-promote.md",
@@ -15,10 +15,10 @@
     ]
   },
   "hzr_skills": {
-    "commit": "f0d95a8ffd0650585fd3bf054ec5714e5ef327ab",
-    "short": "f0d95a8"
+    "commit": "91a6642fa3759067fc06904de7c11699504cce13",
+    "short": "91a6642"
   },
-  "overlay": ".harness/overlay.yaml",
+  "overlay": "/home/steve/shared/projects/grok-webui/.harness/overlay.yaml",
   "project_name": "grok-webui",
   "targets": [
     "grok"
@@ -26,9 +26,7 @@
   "adapters": [
     "grok"
   ],
-  "skills_installed": [
-    "leaf-wiki"
-  ],
+  "skills_installed": null,
   "generator": "coding-agent-mark-ii/scripts/sync-harness.py",
   "overlay_schema": "overlays/SCHEMA.md"
 }
